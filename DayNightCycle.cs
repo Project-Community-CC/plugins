@@ -1,5 +1,8 @@
-﻿using System;
+﻿// 1 in-game day lasts 20 minutes real-time
+
+using System;
 using MCGalaxy.Commands;
+using MCGalaxy.Events;
 using MCGalaxy.Network;
 using MCGalaxy.Tasks;
 
@@ -158,7 +161,12 @@ namespace MCGalaxy
 
         void DoDayNightCycle(SchedulerTask task)
         {
-            if (timeOfDay >= 23999) timeOfDay = 0;
+            if (timeOfDay >= 23999)
+            {
+                timeOfDay = 0;
+                OnNewDayEvent.Call(-1, -1); // Season/day are unused right now
+            }
+
             else timeOfDay += 20;
 
             Player[] players = PlayerInfo.Online.Items;
@@ -167,6 +175,7 @@ namespace MCGalaxy
             {
                 if (!pl.level.Config.MOTD.Contains("daynightcycle=true")) continue;
                 pl.SendCpeMessage(CpeMessageType.Status3, GetGameTimeString(timeOfDay) + " ");
+
                 ColorDesc sky = default(ColorDesc);
                 if (!CommandParser.GetHex(pl, TickToSky(timeOfDay), ref sky)) return;
 
@@ -191,6 +200,17 @@ namespace MCGalaxy
             }
 
             Task = task;
+        }
+    }
+
+    public delegate void OnNewDay(int season, int day);
+
+    public sealed class OnNewDayEvent : IEvent<OnNewDay>
+    {
+        public static void Call(int season, int day)
+        {
+            if (handlers.Count == 0) return;
+            CallCommon(pl => pl(season, day));
         }
     }
 
