@@ -15,6 +15,12 @@ namespace MCGalaxy
         public override string creator { get { return "Venk"; } }
 
         public static int timeOfDay = 0;
+        public static int currentDay = 0;
+        public readonly string[] dayNames = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+
+        public static int currentSeason = 0;
+        public readonly string[] seasonNames = { "Spring", "Summer", "Autumn", "Winter" };
+
         public static SchedulerTask Task;
 
         public override void Load(bool startup)
@@ -136,7 +142,7 @@ namespace MCGalaxy
             return "•";     // Night
         }
 
-        string GetGameTimeString(int ticks)
+        private string GetGameTimeString(int ticks)
         {
             ticks = ticks % 24000;
 
@@ -150,21 +156,30 @@ namespace MCGalaxy
                 period = "PM";
                 if (hour > 12) hour -= 12;
             }
-
             if (hour == 0) hour = 12;
 
-            string timeStr = hour + ":" + minute.ToString("D2") + period;
+            string timeStr = string.Format("{0}:{1:D2}{2}", hour, minute, period);
             string emoji = GetTimeEmoji(ticks);
+            string dayName = dayNames[currentDay % 7];
+            string seasonName = seasonNames[currentSeason % 4];
 
-            return emoji + " " + timeStr;
+            return string.Format("{0} {1}, {2} (Season: {3})", emoji, dayName, timeStr, seasonName);
         }
 
-        void DoDayNightCycle(SchedulerTask task)
+        private void DoDayNightCycle(SchedulerTask task)
         {
             if (timeOfDay >= 23999)
             {
                 timeOfDay = 0;
-                OnNewDayEvent.Call(-1, -1); // Season/day are unused right now
+                currentDay++;
+
+                if (currentDay >= 28)
+                {
+                    currentDay = 0;
+                    currentSeason = (currentSeason + 1) % 4;
+                }
+
+                OnNewDayEvent.Call(currentSeason, currentDay);
             }
 
             else timeOfDay += 20;
