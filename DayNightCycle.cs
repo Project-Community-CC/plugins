@@ -1,12 +1,13 @@
 ﻿// 1 in-game day lasts 20 minutes real-time
 
 using System;
+using MCGalaxy;
 using MCGalaxy.Commands;
 using MCGalaxy.Events;
 using MCGalaxy.Network;
 using MCGalaxy.Tasks;
 
-namespace MCGalaxy
+namespace ProjectCommunity
 {
     public class DayNightCycle : Plugin
     {
@@ -15,11 +16,10 @@ namespace MCGalaxy
         public override string creator { get { return "Venk"; } }
 
         public static int timeOfDay = 0;
-        public static int currentDay = 0;
-        public readonly string[] dayNames = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+        public static DayOfWeek currentDay = DayOfWeek.Sunday;
+        public static int dayNumber = 0;
 
-        public static int currentSeason = 0;
-        public readonly string[] seasonNames = { "Spring", "Summer", "Autumn", "Winter" };
+        public static Season currentSeason = Season.Spring;
 
         public static SchedulerTask Task;
 
@@ -35,7 +35,7 @@ namespace MCGalaxy
             Server.MainScheduler.Cancel(Task);
         }
 
-        string TickToSky(int timeOfDay)
+        private string TickToSky(int timeOfDay)
         {
             if (timeOfDay >= 0 && timeOfDay < 1000) return "#709DED";
             if (timeOfDay >= 1000 && timeOfDay < 11834) return "#78A9FF";
@@ -54,7 +54,7 @@ namespace MCGalaxy
             return "#709DED";
         }
 
-        string TickToCloud(int timeOfDay)
+        private string TickToCloud(int timeOfDay)
         {
             if (timeOfDay >= 0 && timeOfDay < 1000) return "#FFFFFF";
             if (timeOfDay >= 1000 && timeOfDay < 11834) return "#FFFFFF";
@@ -73,7 +73,7 @@ namespace MCGalaxy
             return "#FFFFFF";
         }
 
-        string TickToFog(int timeOfDay)
+        private string TickToFog(int timeOfDay)
         {
             if (timeOfDay >= 0 && timeOfDay < 1000) return "#FFFFFF";
             if (timeOfDay >= 1000 && timeOfDay < 11834) return "#FFFFFF";
@@ -92,7 +92,7 @@ namespace MCGalaxy
             return "#FFFFFF";
         }
 
-        string TickToSun(int timeOfDay)
+        private string TickToSun(int timeOfDay)
         {
             if (timeOfDay >= 0 && timeOfDay < 1000) return "#FFFFFF";
             if (timeOfDay >= 1000 && timeOfDay < 11834) return "#FFFFFF";
@@ -111,7 +111,7 @@ namespace MCGalaxy
             return "#FFFFFF";
         }
 
-        string TickToShadow(int timeOfDay)
+        private string TickToShadow(int timeOfDay)
         {
             if (timeOfDay >= 0 && timeOfDay < 1000) return "#BBBBBB";
             if (timeOfDay >= 1000 && timeOfDay < 11834) return "#BBBBBB";
@@ -133,7 +133,7 @@ namespace MCGalaxy
             return "#BBBBBB";
         }
 
-        string GetTimeEmoji(int ticks)
+        private string GetTimeEmoji(int ticks)
         {
             if ((ticks >= 12542 && ticks < 13188) || (ticks >= 23000 && ticks < 23460))
                 return "◘"; // Sunrise/Sunset
@@ -160,23 +160,24 @@ namespace MCGalaxy
 
             string timeStr = string.Format("{0}:{1:D2}{2}", hour, minute, period);
             string emoji = GetTimeEmoji(ticks);
-            string dayName = dayNames[currentDay % 7];
-            string seasonName = seasonNames[currentSeason % 4];
 
-            return string.Format("{0} {1}, {2} (Season: {3})", emoji, dayName, timeStr, seasonName);
+            return string.Format("{0} {1}, {2} (Season: {3})", emoji, currentDay, timeStr, currentSeason);
         }
 
         private void DoDayNightCycle(SchedulerTask task)
         {
+            OnDayNightCycleTickEvent.Call(timeOfDay, currentSeason, currentDay);
+
             if (timeOfDay >= 23999)
             {
                 timeOfDay = 0;
-                currentDay++;
+                dayNumber++;
+                currentDay = (DayOfWeek)(((int)currentDay + 1) % 7);
 
-                if (currentDay >= 28)
+                if (dayNumber >= 28)
                 {
-                    currentDay = 0;
-                    currentSeason = (currentSeason + 1) % 4;
+                    dayNumber = 0;
+                    currentSeason = (Season)(((int)currentSeason + 1) % 4);
                 }
 
                 OnNewDayEvent.Call(currentSeason, currentDay);
@@ -218,14 +219,44 @@ namespace MCGalaxy
         }
     }
 
-    public delegate void OnNewDay(int season, int day);
+    public enum Season
+    {
+        Spring = 0,
+        Summer = 1,
+        Autumn = 2,
+        Winter = 3
+    }
+
+    public enum DayOfWeek
+    {
+        Sunday = 0,
+        Monday = 1,
+        Tuesday = 2,
+        Wednesday = 3,
+        Thursday = 4,
+        Friday = 5,
+        Saturday = 6
+    }
+
+    public delegate void OnNewDay(Season season, DayOfWeek day);
 
     public sealed class OnNewDayEvent : IEvent<OnNewDay>
     {
-        public static void Call(int season, int day)
+        public static void Call(Season season, DayOfWeek day)
         {
             if (handlers.Count == 0) return;
             CallCommon(pl => pl(season, day));
+        }
+    }
+
+    public delegate void OnDayNightCycleTick(int time, Season season, DayOfWeek day);
+
+    public sealed class OnDayNightCycleTickEvent : IEvent<OnDayNightCycleTick>
+    {
+        public static void Call(int time, Season season, DayOfWeek day)
+        {
+            if (handlers.Count == 0) return;
+            CallCommon(pl => pl(time, season, day));
         }
     }
 

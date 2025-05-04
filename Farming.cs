@@ -5,13 +5,16 @@
 
 using System;
 using System.Collections.Generic;
+using MCGalaxy;
 using MCGalaxy.Events.LevelEvents;
 using MCGalaxy.Events.PlayerEvents;
 using MCGalaxy.Maths;
 using MCGalaxy.SQL;
 using BlockID = System.UInt16;
+using DayOfWeek = ProjectCommunity.DayOfWeek;
+using Season = ProjectCommunity.Season;
 
-namespace MCGalaxy
+namespace ProjectCommunity
 {
     public class Farming : Plugin
     {
@@ -137,7 +140,7 @@ namespace MCGalaxy
             }
         }
 
-        private void HandleNewDay(int season, int day)
+        private void HandleNewDay(Season season, DayOfWeek day)
         {
             foreach (Player pl in PlayerInfo.Online.Items)
             {
