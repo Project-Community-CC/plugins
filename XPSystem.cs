@@ -69,9 +69,8 @@ namespace ProjectCommunity {
         public static void AddXP(Player p, string skill, int xp)
         {
             int newXP =  GetXP(p, skill) + xp;
-
             SetXP(p, skill, newXP);
-            CheckLevelUp(p, skill, newXP);
+            CheckLevelUp(p, skill);
         }
 
         private static string tblName(string skill)
@@ -94,9 +93,7 @@ namespace ProjectCommunity {
         
         public static int GetXP(Player p, string skill)
         {
-            string table = tblName(skill);
-
-            List<string[]> rows = Database.GetRows(table, "*", "WHERE Name=@0", p.name);
+            List<string[]> rows = Database.GetRows(tblName(skill), "*", "WHERE Name=@0", p.name);
 
             return rows.Count > 0  ? int.Parse(rows[0][2]) : 0;
         }
@@ -116,18 +113,15 @@ namespace ProjectCommunity {
 
         public static int GetLevel(Player p, string skill)
         {
-            string table =  tblName(skill);
-
-            List<string[]> rows = Database.GetRows(table, "*", "WHERE Name=@0", p.name);
+            List<string[]> rows = Database.GetRows(tblName(skill), "*", "WHERE Name=@0", p.name);
 
             return rows.Count > 0 ? int.Parse(rows[0][1]) : 0;
         }
 
 
-        private static void CheckLevelUp(Player p, string skill, int xp=-1)
+        private static void CheckLevelUp(Player p, string skill,)
         {
-            if (xp == -1)
-                xp = GetXP(p, skill);
+            int xp = GetXP(p, skill);
 
             int lvl = XPSystem.GetLevel(p, skill);
             int newlvl = lvl;
