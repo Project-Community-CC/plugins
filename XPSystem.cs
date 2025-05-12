@@ -8,14 +8,14 @@ using MCGalaxy.Tasks;
 using MCGalaxy;
 
 namespace ProjectCommunity {
-    public class XPSkill
+    public class XPSkillInfo
     {
         public string Colour;
         public int XPRequiredForLevel(int level)
         {
             return level*100;
         }
-        public XPSkill(string colour="%e")
+        public XPSkillInfo(string colour="%e")
         {
             this.Colour = colour;
         }
@@ -25,16 +25,26 @@ namespace ProjectCommunity {
         public override string MCGalaxy_Version { get { return "1.9.5.1"; } }
         public override string name { get { return "XPSystem"; } }
 
-        public static XPSkill defaultSkill = new XPSkill();
+        public static XPSkillInfo defaultSkill = new XPSkillInfo();
 
-        public static Dictionary<string, XPSkill> Skills = new Dictionary<string, XPSkill>()
+        public enum XPSkill
         {
-            {"fishing"  ,     new XPSkill("%h")},
-            {"cooking"  ,     new XPSkill("%n")},
-            {"foraging" ,     new XPSkill("%2")},
-            {"mining"   ,     new XPSkill("%j")},
-            {"farming"  ,     new XPSkill("%m")},
-            {"social"   ,     new XPSkill("%d")}
+            Fishing,
+            Cooking,
+            Foraging,
+            Mining,
+            Farming,
+            Social
+        }
+
+        public static Dictionary<XPSkill, XPSkillInfo> Skills = new Dictionary<XPSkill, XPSkillInfo>()
+        {
+            {XPSkill.Fishing  ,     new XPSkillInfo("%h")},
+            {XPSkill.Cooking  ,     new XPSkillInfo("%n")},
+            {XPSkill.Foraging ,     new XPSkillInfo("%2")},
+            {XPSkill.Mining   ,     new XPSkillInfo("%j")},
+            {XPSkill.Farming  ,     new XPSkillInfo("%m")},
+            {XPSkill.Social   ,     new XPSkillInfo("%d")}
         };
 
         public static string MsgLevelUp = "%eYour {col}{skill} %eskill leveled up to level %a{lvl}%e!";
@@ -42,8 +52,8 @@ namespace ProjectCommunity {
         public CmdXP xpCmd = new CmdXP();
 
         public override void Load(bool startup) {
-            foreach(var pair in Skills)
-                Database.CreateTable("xp_"+pair.Key, PlayerXPTable);
+            foreach(var skill in Enum.GetValues(typeof(XPSkill)))
+                Database.CreateTable(tblName((XPSkill)skill), PlayerXPTable);
 
             Command.Register(xpCmd);
         }
@@ -59,26 +69,26 @@ namespace ProjectCommunity {
             new ColumnDesc("XP", ColumnType.Int32),
         };
         
-        public static int GetXPRequiredLevelUp(string skill, int level)
+        public static int GetXPRequiredLevelUp(XPSkill skill, int level)
         {
             if (Skills.ContainsKey(skill))
                 return Skills[skill].XPRequiredForLevel(level);
             return defaultSkill.XPRequiredForLevel(level);
         }
 
-        public static void AddXP(Player p, string skill, int xp)
+        public static void AddXP(Player p, XPSkill skill, int xp)
         {
             int newXP =  GetXP(p, skill) + xp;
             SetXP(p, skill, newXP);
             CheckLevelUp(p, skill);
         }
 
-        private static string tblName(string skill)
+        private static string tblName(XPSkill skill)
         {
-            return "xp_" + skill.ToLower();
+            return "xp_" + Enum.GetName(typeof(XPSkill), skill).ToLower();
         }
 
-        public static void SetXP(Player p, string skill, int xp) {
+        public static void SetXP(Player p, XPSkill skill, int xp) {
             string table = tblName(skill);
             
 	        List<string[]> rows = Database.GetRows(table, "*", "WHERE Name=@0", p.name);
@@ -91,14 +101,14 @@ namespace ProjectCommunity {
             Database.UpdateRows(table, "XP=@1", "WHERE NAME=@0", p.name, xp);
         }
         
-        public static int GetXP(Player p, string skill)
+        public static int GetXP(Player p, XPSkill skill)
         {
             List<string[]> rows = Database.GetRows(tblName(skill), "*", "WHERE Name=@0", p.name);
 
             return rows.Count > 0  ? int.Parse(rows[0][2]) : 0;
         }
 
-        public static void SetLevel(Player p, string skill, int level) {
+        public static void SetLevel(Player p, XPSkill skill, int level) {
             string table =  tblName(skill);
             
 	        List<string[]> rows = Database.GetRows(table, "*", "WHERE Name=@0", p.name);
@@ -111,14 +121,14 @@ namespace ProjectCommunity {
             Database.UpdateRows(table, "Level=@1", "WHERE NAME=@0", p.name, level);
         }
 
-        public static int GetLevel(Player p, string skill)
+        public static int GetLevel(Player p, XPSkill skill)
         {
             List<string[]> rows = Database.GetRows(tblName(skill), "*", "WHERE Name=@0", p.name);
 
             return rows.Count > 0 ? int.Parse(rows[0][1]) : 0;
         }
 
-        public static void CheckLevelUp(Player p, string skill)
+        public static void CheckLevelUp(Player p, XPSkill skill)
         {
             int xp = GetXP(p, skill);
 
@@ -133,7 +143,7 @@ namespace ProjectCommunity {
             
             SetLevel(p, skill, newlvl);
 
-            string msg = MsgLevelUp.Replace("{skill}", skill)
+            string msg = MsgLevelUp.Replace("{skill}", Enum.GetName(typeof(XPSkill), skill))
                 .Replace("{col}", Skills.ContainsKey(skill) ? Skills[skill].Colour : defaultSkill.Colour)
                 .Replace("{lvl}", newlvl.ToString());
 
@@ -155,7 +165,7 @@ namespace ProjectCommunity {
                     return;
                 p.Message("%T/xp give player skill XP %S- Give XP for skill");
             }
-            private void GiveXP(Player p, Player target, string skill, string xparg="")
+            private void GiveXP(Player p, Player target, string skillarg, string xparg="")
             {
                 int xp = 0;
                
@@ -168,7 +178,12 @@ namespace ProjectCommunity {
                     p.Message("&cInvalid XP amount.");
                     return;
                 }
-                skill = skill.ToLower();
+                XPSkill skill;
+                if (!Enum.TryParse(skillarg, true, out skill))
+                {
+                    p.Message("&c\"%e" + skillarg + "%c\" is not a valid skill!");
+                    return;
+                }
 
                 if (!XPSystem.Skills.ContainsKey(skill))
                 {
@@ -242,8 +257,8 @@ namespace ProjectCommunity {
                     int level   = XPSystem.GetLevel(target, pair.Key);
                     int xp      = XPSystem.GetXP(target, pair.Key);
                     int xprequired = XPSystem.GetXPRequiredLevelUp(pair.Key, level+1);
-                    p.Message(pair.Value.Colour + pair.Key + "%e: Level %a" + level.ToString());
-                    p.Message("     %eXP until level %a" + (level+1).ToString() + "%e: %7"+ (xprequired-xp).ToString() + "%e.");
+                    p.Message("     " + pair.Value.Colour + Enum.GetName(typeof(XPSkill), pair.Key) + "%e: Level %a" + level.ToString());
+                    p.Message("         %eXP until level %a" + (level+1).ToString() + "%e: %7"+ (xprequired-xp).ToString() + "%e.");
                 }
             }
         }
