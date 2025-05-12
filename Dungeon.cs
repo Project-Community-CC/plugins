@@ -3,8 +3,6 @@
 
 // TODO:
 // - Neaten code
-// - Add mineable rocks/geodes
-// - Spawn holes under one of the rocks so the player can descend to the next level
 // - Maybe some decorative vines/cobwebs on the roof
 // - Mossy stone brick noise/cloudy brush on the walls/roof for decoration
 // - Dungeon presets: normal, ice, desert, fire?
@@ -16,6 +14,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using MCGalaxy;
+using MCGalaxy.Events.PlayerEvents;
 using MCGalaxy.Network;
 
 using BlockID = System.UInt16;
@@ -31,11 +30,44 @@ namespace Core
         public override void Load(bool startup)
         {
             Command.Register(new CmdDungeon());
+            OnPlayerClickEvent.Register(HandleBlockClick, Priority.Low);
         }
 
         public override void Unload(bool shutdown)
         {
             Command.Unregister(Command.Find("Dungeon"));
+            OnPlayerClickEvent.Unregister(HandleBlockClick);
+        }
+
+        void HandleBlockClick(Player p, MouseButton button, MouseAction action, ushort yaw, ushort pitch, byte entity, ushort x, ushort y, ushort z, TargetBlockFace face)
+        {
+            if (!p.level.name.CaselessEq("dungeon")) return;
+
+            if (p.Extras.Contains("DUNGEON_EXIT_LADDER_POSITION"))
+            {
+                string[] exitLadderPosition = p.Extras.GetString("DUNGEON_EXIT_LADDER_POSITION").Split(';');
+                int ladderX = int.Parse(exitLadderPosition[0]);
+                // No need for Y here
+                int ladderZ = int.Parse(exitLadderPosition[2]);
+
+                if (x == ladderX && z == ladderZ)
+                {
+                    p.Message("Clicked on exit ladder.");
+                }
+            }
+
+            if (p.Extras.Contains("DUNGEON_DESCEND_LADDER_POSITION"))
+            {
+                string[] descendLadderPosition = p.Extras.GetString("DUNGEON_DESCEND_LADDER_POSITION").Split(';');
+                int ladderX = int.Parse(descendLadderPosition[0]);
+                int ladderY = int.Parse(descendLadderPosition[1]);
+                int ladderZ = int.Parse(descendLadderPosition[2]);
+
+                if (x == ladderX && y == ladderY && z == ladderZ)
+                {
+                    p.Message("Clicked on descend ladder.");
+                }
+            }
         }
     }
 
@@ -67,7 +99,7 @@ namespace Core
             SimpleRandomWalkDungeonGenerator generator = new SimpleRandomWalkDungeonGenerator(p.level, iterations, length, random);
             //generator.RunProceduralGeneration();
 
-            CorridorFirstDungeonGenerator generator2 = new CorridorFirstDungeonGenerator(p.level, corridorLength, corridorWidth, corridorCount, roomPercent);
+            CorridorFirstDungeonGenerator generator2 = new CorridorFirstDungeonGenerator(p, p.level, corridorLength, corridorWidth, corridorCount, roomPercent);
             generator2.RunProceduralGeneration();
         }
 
@@ -117,14 +149,16 @@ namespace Core
 
     public class CorridorFirstDungeonGenerator
     {
+        public Player player = null;
         public int corridorLength = 14;
         public int corridorWidth = 5;
         public int corridorCount = 5;
         public float roomPercent = 0.5f; // 0.1 - 1
         public Level lvl = null;
 
-        public CorridorFirstDungeonGenerator(Level _lvl, int _corridorLength, int _corridorWidth, int _corridorCount, float _roomPercent)
+        public CorridorFirstDungeonGenerator(Player _player, Level _lvl, int _corridorLength, int _corridorWidth, int _corridorCount, float _roomPercent)
         {
+            player = _player;
             corridorLength = _corridorLength;
             corridorWidth = _corridorWidth;
             corridorCount = _corridorCount;
@@ -161,9 +195,14 @@ namespace Core
                 floorPositions.UnionWith(corridors[i]);
             }
 
-            TilemapVisualizer.Clear(lvl);
-            TilemapVisualizer.PaintFloorTiles(lvl, floorPositions);
-            TilemapVisualizer.CreateWalls(lvl, floorPositions);
+            TilemapVisualizer visualiser = new TilemapVisualizer(player);
+            visualiser.Clear();
+            visualiser.PaintFloorTiles(floorPositions);
+            visualiser.CreateWalls(floorPositions);
+            visualiser.ScatterRocks(floorPositions);
+
+            Position spawnPos = new Position((visualiser.spawnPosition.X * 32) + 16, (visualiser.spawnPosition.Y * 32) + 128, (visualiser.spawnPosition.Z * 32) + 16);
+            player.SendPosition(spawnPos, player.Rot);
         }
 
         public List<Position> IncreaseCorridorBrush3by3(List<Position> corridor)
@@ -329,75 +368,39 @@ namespace Core
         }
     }
 
-    public class SimpleRandomWalkDungeonGenerator
-    {
-        public static int iterations = 20;
-        public static int walkLength = 20;
-        public static bool startRandomlyEachIteration = true;
-        public static Level lvl;
-
-        public SimpleRandomWalkDungeonGenerator(Level _lvl, int _iterations, int _walkLength, bool _startRandomlyEachIteration)
-        {
-            iterations = _iterations;
-            walkLength = _walkLength;
-            startRandomlyEachIteration = _startRandomlyEachIteration;
-            lvl = _lvl;
-        }
-
-        public virtual void RunProceduralGeneration()
-        {
-            HashSet<Position> floorPositions = RunRandomWalk(CmdDungeon.startPosition);
-
-            //TilemapVisualizer.Clear();
-            //TilemapVisualizer.PaintFloorTiles(floorPositions);
-            //TilemapVisualizer.CreateWalls(floorPositions);
-        }
-
-        public static HashSet<Position> RunRandomWalk(Position position)
-        {
-            var currentPosition = position;
-            HashSet<Position> floorPositions = new HashSet<Position>();
-
-            Random random = new Random();
-            for (int i = 0; i < iterations; i++)
-            {
-                var path = ProceduralGenerationAlgorithms.SimpleRandomWalk(currentPosition, walkLength);
-                floorPositions.UnionWith(path);
-
-                if (startRandomlyEachIteration)
-                {
-                    currentPosition = floorPositions.ElementAt(random.Next(0, floorPositions.Count));
-                }
-            }
-
-            return floorPositions;
-        }
-    }
-
     public class TilemapVisualizer
     {
-        private static BlockID floorBlock = Block.FromRaw(1);
-        //private static BlockID wallBlock = Block.FromRaw(12);
+        public Player player = null;
+        private BlockID floorBlock = Block.FromRaw(1);
+        //private BlockID wallBlock = Block.FromRaw(12);
 
-        private static Random random = new Random();
+        private Random random = new Random();
 
-        private static BufferedBlockSender bulk = new BufferedBlockSender();
+        private BufferedBlockSender bulk = new BufferedBlockSender();
+        public Position spawnPosition = new Position(0, 0, 0);
+        private Level lvl = null;
 
-        public static void PaintFloorTiles(Level lvl, IEnumerable<Position> floorPositions)
+        public TilemapVisualizer(Player _player)
         {
-            PaintTiles(lvl, floorPositions);
-            SendBulkBlockUpdate(lvl);
+            player = _player;
+            lvl = _player.level;
         }
 
-        private static void PaintTiles(Level lvl, IEnumerable<Position> positions)
+        public void PaintFloorTiles(IEnumerable<Position> floorPositions)
+        {
+            PaintTiles(floorPositions);
+            SendBulkBlockUpdate();
+        }
+
+        private void PaintTiles(IEnumerable<Position> positions)
         {
             foreach (var position in positions)
             {
-                PaintSingleTile(lvl, position);
+                PaintSingleTile(position);
             }
         }
 
-        private static void PaintSingleTile(Level lvl, Position position)
+        private void PaintSingleTile(Position position)
         {
             int index = lvl.PosToInt((ushort)position.X, (ushort)position.Y, (ushort)position.Z);
             int roofIndex = lvl.PosToInt((ushort)position.X, (ushort)(position.Y + 7), (ushort)position.Z);
@@ -406,14 +409,14 @@ namespace Core
             //lvl.BroadcastChange((ushort)position.X, (ushort)position.Y, (ushort)position.Z, floorBlock);
         }
 
-        public static void PaintSingleBasicWall(Level lvl, Position position, BlockID block)
+        public void PaintSingleBasicWall(Position position, BlockID block)
         {
             int index = lvl.PosToInt((ushort)position.X, (ushort)(position.Y + 1), (ushort)position.Z);
             bulk.Add(index, block);
             //lvl.BroadcastChange((ushort)position.X, (ushort)(position.Y + 1), (ushort)position.Z, wallBlock);
         }
 
-        public static void CreateWalls(Level lvl, HashSet<Position> floorPositions)
+        public void CreateWalls(HashSet<Position> floorPositions)
         {
             var basicWallPositions = FindWallsInDirections(floorPositions, Direction2D.cardinalDirectionsList);
 
@@ -424,24 +427,24 @@ namespace Core
 
             foreach (var position in basicWallPositions)
             {
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y - 1, position.Z), Block.FromRaw(13));
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 5, position.Z), Block.FromRaw(13));
+                PaintSingleBasicWall(new Position(position.X, position.Y - 1, position.Z), Block.FromRaw(13));
+                PaintSingleBasicWall(new Position(position.X, position.Y + 5, position.Z), Block.FromRaw(13));
             }
 
             foreach (var position in floorAndWallPositions)
             {
-                TilemapVisualizer.PaintSingleBasicWall(lvl, position, Block.FromRaw(65));
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 1, position.Z), Block.FromRaw(65));
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 2, position.Z), Block.FromRaw(65));
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 3, position.Z), Block.FromRaw(65));
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 4, position.Z), Block.FromRaw(65));
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 5, position.Z), Block.FromRaw(65));
+                PaintSingleBasicWall(position, Block.FromRaw(65));
+                PaintSingleBasicWall(new Position(position.X, position.Y + 1, position.Z), Block.FromRaw(65));
+                PaintSingleBasicWall(new Position(position.X, position.Y + 2, position.Z), Block.FromRaw(65));
+                PaintSingleBasicWall(new Position(position.X, position.Y + 3, position.Z), Block.FromRaw(65));
+                PaintSingleBasicWall(new Position(position.X, position.Y + 4, position.Z), Block.FromRaw(65));
+                PaintSingleBasicWall(new Position(position.X, position.Y + 5, position.Z), Block.FromRaw(65));
             }
 
             /*var stroke = FindWallsInDirections2(floorAndWallPositions, Direction2D.cardinalDirectionsList);
             foreach (var position in stroke)
             {
-                TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 5, position.Z), Block.Green);
+                PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 5, position.Z), Block.Green);
             }*/
 
             HashSet<Position> lastSet = new HashSet<Position>(floorAndWallPositions);
@@ -453,19 +456,19 @@ namespace Core
 
                 foreach (var position in lastSet)
                 {
-                    //TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 4, position.Z), Block.FromRaw(33));
+                    //PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 4, position.Z), Block.FromRaw(33));
 
                     /*if (random.NextDouble() < 0.02) // Adjust the probability threshold as needed
                     {
-                        TilemapVisualizer.PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 5, position.Z), Block.Pink);
+                        PaintSingleBasicWall(lvl, new Position(position.X, position.Y + 5, position.Z), Block.Pink);
                     }*/
                 }
             }
 
-            SendBulkBlockUpdate(lvl);
+            SendBulkBlockUpdate();
         }
 
-        private static HashSet<Position> FindWallsInDirections(HashSet<Position> floorPositions, List<Position> directionList)
+        private HashSet<Position> FindWallsInDirections(HashSet<Position> floorPositions, List<Position> directionList)
         {
             HashSet<Position> wallPositions = new HashSet<Position>();
 
@@ -485,7 +488,7 @@ namespace Core
             return wallPositions;
         }
 
-        private static HashSet<Position> FindWallsInDirections2(HashSet<Position> floorAndWallPositions, List<Position> directionList)
+        private HashSet<Position> FindWallsInDirections2(HashSet<Position> floorAndWallPositions, List<Position> directionList)
         {
             HashSet<Position> newWallPositions = new HashSet<Position>();
 
@@ -505,7 +508,7 @@ namespace Core
             return newWallPositions;
         }
 
-        public static void Clear(Level lvl)
+        public void Clear()
         {
             for (ushort x = 0; x < lvl.Length; x++)
                 for (ushort y = 0; y <= 7; y++)
@@ -516,10 +519,89 @@ namespace Core
                         bulk.Add(index, Block.Air);
                     }
 
-            SendBulkBlockUpdate(lvl);
+            SendBulkBlockUpdate();
         }
 
-        private static void SendBulkBlockUpdate(Level lvl)
+        public void ScatterRocks(HashSet<Position> floorPositions)
+        {
+            BlockID[] rockTypes = new BlockID[] { Block.Red, Block.Orange, Block.Yellow };
+            Random rnd = new Random();
+
+            List<Position> rockPositions = new List<Position>();
+            List<Position> spawnPositions = new List<Position>();
+
+            foreach (var pos in floorPositions)
+            {
+                if (rnd.NextDouble() < 0.1) // 10% chance to place a rock
+                {
+                    BlockID rock = rockTypes[rnd.Next(rockTypes.Length)];
+                    int rockIndex = lvl.PosToInt((ushort)pos.X, (ushort)(pos.Y + 1), (ushort)pos.Z);
+                    bulk.Add(rockIndex, rock);
+                    rockPositions.Add(pos);
+                }
+            }
+
+            if (floorPositions.Count > 0)
+            {
+                spawnPosition = floorPositions.ElementAt(rnd.Next(floorPositions.Count)); // Generate random spawn position
+
+                if (IsPositionEmpty(spawnPosition))
+                {
+                    // Place the exit ladder next to the spawn
+                    Position ladderPos = GetNextEmptyPosition(spawnPosition);
+                    player.Extras["DUNGEON_EXIT_LADDER_POSITION"] = ladderPos.X + ";" + ladderPos.Y + ";" + ladderPos.Z;
+                    if (ladderPos != null)
+                    {
+                        for (int i = 1; i < 8; i++)
+                        {
+                            int ladderIndex = lvl.PosToInt((ushort)ladderPos.X, (ushort)(ladderPos.Y + i), (ushort)ladderPos.Z);
+                            if (i == 7) bulk.Add(ladderIndex, Block.FromRaw(34)); // Hole above the exit ladder appears as a black block
+                            else bulk.Add(ladderIndex, Block.FromRaw(159)); // Exit ladder blocks
+                        }
+                    }
+
+                    spawnPositions.Add(spawnPosition);
+                }
+            }
+
+            // Place a ladder under a random rock
+            if (rockPositions.Count > 0)
+            {
+                Position ladderPos = rockPositions[rnd.Next(rockPositions.Count)];
+                int ladderIndex = lvl.PosToInt((ushort)ladderPos.X, (ushort)(ladderPos.Y), (ushort)ladderPos.Z);
+                int holeIndex = lvl.PosToInt((ushort)ladderPos.X, (ushort)(ladderPos.Y - 1), (ushort)ladderPos.Z);
+
+                bulk.Add(ladderIndex, Block.FromRaw(159)); // Ladder block
+                bulk.Add(holeIndex, Block.Black); // Block hole
+                player.Extras["DUNGEON_DESCEND_LADDER_POSITION"] = ladderPos.X + ";" + ladderPos.Y + ";" + ladderPos.Z;
+            }
+
+            SendBulkBlockUpdate();
+        }
+
+        private bool IsPositionEmpty(Position pos)
+        {
+            int index = lvl.PosToInt((ushort)pos.X, (ushort)(pos.Y + 1), (ushort)pos.Z);
+            return lvl.FastGetBlock(index) == Block.Air;
+        }
+
+        private Position GetNextEmptyPosition(Position pos)
+        {
+            // Try all cardinal directions around the position for an empty space
+            foreach (var direction in Direction2D.cardinalDirectionsList)
+            {
+                Position newPos = new Position(pos.X + direction.X, pos.Y, pos.Z + direction.Z);
+                if (IsPositionEmpty(newPos))
+                {
+                    return newPos;
+                }
+            }
+
+            // No valid positions
+            return new Position(-1, -1, -1);
+        }
+
+        private void SendBulkBlockUpdate()
         {
             bulk.level = lvl;
             bulk.Flush();
