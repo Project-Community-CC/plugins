@@ -1,5 +1,5 @@
 ﻿//pluginref __Constants.dll
-//pluginref _ItemSystem.dll
+//pluginref __ItemSystem.dll
 //pluginref DayNightCycle.dll
 
 // TODO: Farming doesn't work if the player isn't in the level at the time of new day

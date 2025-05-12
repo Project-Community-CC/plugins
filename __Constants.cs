@@ -44,5 +44,17 @@ namespace MCGalaxy
         public static BlockID Beet = Block.FromRaw(203);
         public static BlockID Potato = Block.FromRaw(208);
         public static BlockID Wheat = Block.FromRaw(213);
+
+        // Food blocks
+
+        public static BlockID BakedPotato = Block.FromRaw(308);
+        public static BlockID Cake = Block.FromRaw(309);
+        public static BlockID Bread = Block.FromRaw(312);
+        public static BlockID Chicken = Block.FromRaw(313);
+        public static BlockID Steak = Block.FromRaw(314);
+        public static BlockID Fish = Block.FromRaw(315);
+        public static BlockID Cookie = Block.FromRaw(316);
+        public static BlockID Grape = Block.FromRaw(317);
+        public static BlockID Soup = Block.FromRaw(318);
     }
 }
