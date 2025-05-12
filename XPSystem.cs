@@ -118,8 +118,7 @@ namespace ProjectCommunity {
             return rows.Count > 0 ? int.Parse(rows[0][1]) : 0;
         }
 
-
-        private static void CheckLevelUp(Player p, string skill,)
+        public static void CheckLevelUp(Player p, string skill)
         {
             int xp = GetXP(p, skill);
 
