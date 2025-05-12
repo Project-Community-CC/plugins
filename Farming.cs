@@ -62,8 +62,8 @@ namespace ProjectCommunity
             OnLevelDeletedEvent.Register(HandleLevelDeleted, Priority.Low);
             OnNewDayEvent.Register(HandleNewDay, Priority.Low);
 
-            ItemSystem.RegisterItem(42, new WateringCanTool());
-            ItemSystem.RegisterItem(43, new HoeTool());
+            ItemSystem.RegisterItem(BlockConstants.Watering_Can_Tool, new WateringCanTool());
+            ItemSystem.RegisterItem(BlockConstants.Hoe_Tool         , new HoeTool());
         }
 
         public override void Unload(bool shutdown)
