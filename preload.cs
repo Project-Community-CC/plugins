@@ -8,18 +8,14 @@ namespace MCGalaxy {
         public override string MCGalaxy_Version { get { return "1.9.5.1"; } }
         public override string name { get { return "preload"; } }
 
-
-
         public CmdPluginReload pluginReloadCmd = new CmdPluginReload();
         public CmdPluginRecompile pluginRecompileCmd = new CmdPluginRecompile();
 
         public override void Load(bool startup) {
-
             Command.Register(pluginReloadCmd);
             Command.Register(pluginRecompileCmd);
         }
         
-
         public override void Unload(bool shutdown) {
             Command.Unregister(pluginReloadCmd);
             Command.Unregister(pluginRecompileCmd);
@@ -45,11 +41,13 @@ namespace MCGalaxy {
                     Help(p);
                     return;
                 }
+
                 Command.Find("Plugin").Use(p, "unload " + args[0]);
                 Command.Find("Plugin").Use(p, "load " + args[0]);
             }
         }
-          public class CmdPluginRecompile : Command2
+
+        public class CmdPluginRecompile : Command2
         {
             public override string name { get { return "precompile"; } }
             public override string type { get { return "other"; } }
@@ -69,11 +67,11 @@ namespace MCGalaxy {
                     Help(p);
                     return;
                 }
+
                 Command.Find("Compile").Use(p, "plugin " + args[0]);
                 Command.Find("Plugin").Use(p, "unload " + args[0]);
                 Command.Find("Plugin").Use(p, "load " + args[0]);
             }
         }
-
     }
 }
