@@ -13,6 +13,7 @@ namespace ProjectCommunity {
     public class XPSkillInfo
     {
         public string Colour;
+        public int MaxLevel = 10;
         public virtual int XPRequiredForLevel(int level)
         {
             return (level*100);
@@ -36,7 +37,7 @@ namespace ProjectCommunity {
     public class XPSystem : Plugin {
         public override string creator { get { return "morgana"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.1"; } }
-        public override string name { get { return "_XPSystem"; } }
+        public override string name { get { return "__XPSystem"; } }
 
         public static XPSkillInfo defaultSkill = new XPSkillInfo();
 
@@ -51,20 +52,23 @@ namespace ProjectCommunity {
             {XPSkill.Social   ,     new XPSkillInfo("%d")}
         };
 
-        public static string MsgLevelUp = "%eYour {col}{skill} %eskill leveled up to level %a{lvl}%e!";
+        public static XPSkillInfo GetSkillInfo(XPSkill skill)
+        {
+            return Skills.ContainsKey(skill) ? Skills[skill] : defaultSkill;
+        }
 
-        public CmdXP xpCmd = new CmdXP();
+        public static string MsgLevelUp = "%eYour {col}{skill} %eskill leveled up to level %a{lvl}%e!";
 
         public override void Load(bool startup) {
             foreach(var skill in Enum.GetValues(typeof(XPSkill)))
                 Database.CreateTable(tblName((XPSkill)skill), PlayerXPTable);
 
-            Command.Register(xpCmd);
+            Command.Register(new CmdXP());
         }
         
 
         public override void Unload(bool shutdown) {
-            Command.Unregister(xpCmd);
+            Command.Unregister(Command.Find("XP"));
         }
 
         private ColumnDesc[] PlayerXPTable = new ColumnDesc[] {
@@ -82,7 +86,17 @@ namespace ProjectCommunity {
 
         public static void AddXP(Player p, XPSkill skill, int xp)
         {
-            int newXP =  GetXP(p, skill) + xp;
+            int maxXP = GetXPRequiredLevelUp(skill, GetSkillInfo(skill).MaxLevel);
+
+            int oldXP = GetXP(p, skill);
+
+            if (oldXP >= maxXP)
+                return;
+
+            int newXP = oldXP + xp;
+            if (newXP > maxXP)
+                newXP = maxXP;
+            
             SetXP(p, skill, newXP);
             CheckLevelUp(p, skill);
         }
@@ -134,9 +148,14 @@ namespace ProjectCommunity {
 
         public static void CheckLevelUp(Player p, XPSkill skill)
         {
+            int maxlvl = GetSkillInfo(skill).MaxLevel;
+            int lvl = XPSystem.GetLevel(p, skill);
+
+            if (lvl >= maxlvl)
+                return;
+
             int xp = GetXP(p, skill);
 
-            int lvl = XPSystem.GetLevel(p, skill);
             int newlvl = lvl;
 
             while (GetXPRequiredLevelUp(skill, newlvl+1) <= xp)
@@ -145,6 +164,9 @@ namespace ProjectCommunity {
             if (newlvl == lvl)
                 return;
             
+            if (newlvl > maxlvl)
+                return;
+
             SetLevel(p, skill, newlvl);
 
             string msg = MsgLevelUp.Replace("{skill}", Enum.GetName(typeof(XPSkill), skill))
@@ -251,14 +273,18 @@ namespace ProjectCommunity {
 
             private void DisplayInfo(Player p, Player target)
             {
-                p.Message("%eXP Info for " + target.ColoredName + "%e:");
+                p.Message("%eSkills Info for " + target.ColoredName + "%e:");
                 foreach(var pair in XPSystem.Skills)
                 {
                     int level   = XPSystem.GetLevel(target, pair.Key);
+                    int maxlevel = XPSystem.GetSkillInfo(pair.Key).MaxLevel;
+                    p.Message("     " + pair.Value.Colour + Enum.GetName(typeof(XPSkill), pair.Key) + " %7(%a" + level.ToString() + "%7/%a" + maxlevel.ToString() + "%7)");
+
+                    if (level >= maxlevel) continue;
+
                     int xp      = XPSystem.GetXP(target, pair.Key);
                     int xprequired = XPSystem.GetXPRequiredLevelUp(pair.Key, level+1);
-                    p.Message("     " + pair.Value.Colour + Enum.GetName(typeof(XPSkill), pair.Key) + "%e: Level %a" + level.ToString());
-                    p.Message("         %eXP until level %a" + (level+1).ToString() + "%e: %7"+ (xprequired-xp).ToString() + "%e.");
+                    p.Message("         %7XP until level %a" + (level+1).ToString() + "%7: %3"+ (xprequired-xp).ToString() + "%7.");
                 }
             }
         }
