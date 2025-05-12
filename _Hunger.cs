@@ -18,6 +18,7 @@ namespace ProjectCommunity
         public override string creator { get { return "morgana"; } }
 
         public const int MaxHunger = 10;
+        const int StarveInterval = 120;
 
         private SchedulerTask hungerTask;
 
@@ -51,11 +52,12 @@ namespace ProjectCommunity
             if (DateTime.Now < nextHungerStarve)
                 return;
 
-            nextHungerStarve = DateTime.Now.AddSeconds(30);
+            nextHungerStarve = DateTime.Now.AddSeconds(StarveInterval);
 
             foreach(var pl in PlayerInfo.Online.Items)
                 AddHunger(pl, -1);
         }
+
         private static void PlayerJoinedLevel(Player p, Level oldlvl, Level newlvl, ref bool announce)
         {
             GuiHunger(p);
@@ -77,9 +79,11 @@ namespace ProjectCommunity
 
             return rows.Count > 0  ? int.Parse(rows[0][1]) : MaxHunger;
         }
+
         public static void SetHunger(Player p, int amount)
         {
             List<string[]> rows = Database.GetRows("hunger", "*", "WHERE Name=@0", p.name);
+
             if (rows.Count == 0) 
 	            Database.AddRow("hunger", "Name, Hunger", p.name, amount);
             else
@@ -87,6 +91,7 @@ namespace ProjectCommunity
 
             GuiHunger(p);
         }
+        
         public static void AddHunger(Player p, int amount)
         {
             int oldHunger = GetHunger(p);
