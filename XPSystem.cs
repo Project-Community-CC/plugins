@@ -20,6 +20,15 @@ namespace ProjectCommunity {
             this.Colour = colour;
         }
     }
+    public enum XPSkill
+    {
+        Fishing,
+        Cooking,
+        Foraging,
+        Mining,
+        Farming,
+        Social
+    }
     public class XPSystem : Plugin {
         public override string creator { get { return "morgana"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.1"; } }
@@ -27,15 +36,6 @@ namespace ProjectCommunity {
 
         public static XPSkillInfo defaultSkill = new XPSkillInfo();
 
-        public enum XPSkill
-        {
-            Fishing,
-            Cooking,
-            Foraging,
-            Mining,
-            Farming,
-            Social
-        }
 
         public static Dictionary<XPSkill, XPSkillInfo> Skills = new Dictionary<XPSkill, XPSkillInfo>()
         {
