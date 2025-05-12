@@ -8,10 +8,11 @@ using MCGalaxy.Tasks;
 using MCGalaxy;
 
 namespace ProjectCommunity {
+
     public class XPSkillInfo
     {
         public string Colour;
-        public int XPRequiredForLevel(int level)
+        public virtual int XPRequiredForLevel(int level)
         {
             return level*100;
         }
@@ -20,6 +21,7 @@ namespace ProjectCommunity {
             this.Colour = colour;
         }
     }
+
     public enum XPSkill
     {
         Fishing,
