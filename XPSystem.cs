@@ -160,7 +160,7 @@ namespace ProjectCommunity {
             public override void Help(Player p)
             {
                 p.Message("%T/xp %S- Get info about current xp");
-                p.Message("%T/xp player %S- Get info about current xp for a player");
+                p.Message("%T/xp [player] %S- Get info about current xp for a player");
                 if (p.Rank < giveXPRank)
                     return;
                 p.Message("%T/xp give [player] [skill] [XP] %S- Give XP for skill");
@@ -208,7 +208,7 @@ namespace ProjectCommunity {
                     Help(p);
                     return;
                 }
-                
+
                 Player target = PlayerInfo.FindMatches(p, args[1]);
                 if (target == null)
                 {
