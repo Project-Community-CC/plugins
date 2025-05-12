@@ -2,24 +2,27 @@ using System;
 using System.Collections.Generic;
 using MCGalaxy.Events.LevelEvents;
 using MCGalaxy.Events.PlayerEvents;
+using MCGalaxy.Events;
 using MCGalaxy.Maths;
 using MCGalaxy.SQL;
 using MCGalaxy.Tasks;
 using MCGalaxy;
-
+using ProjectCommunity.Events.PlayerEvents;
 namespace ProjectCommunity {
+
     public class XPSkillInfo
     {
         public string Colour;
-        public int XPRequiredForLevel(int level)
+        public virtual int XPRequiredForLevel(int level)
         {
-            return level*100;
+            return (level*100);
         }
         public XPSkillInfo(string colour="%e")
         {
             this.Colour = colour;
         }
     }
+
     public enum XPSkill
     {
         Fishing,
@@ -29,6 +32,7 @@ namespace ProjectCommunity {
         Farming,
         Social
     }
+
     public class XPSystem : Plugin {
         public override string creator { get { return "morgana"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.1"; } }
@@ -148,6 +152,8 @@ namespace ProjectCommunity {
                 .Replace("{lvl}", newlvl.ToString());
 
             p.Message(msg);
+
+            OnPlayerXPLevelUpEvent.Call(p, skill, lvl, newlvl);
         }
 
         public class CmdXP : Command2
@@ -257,5 +263,21 @@ namespace ProjectCommunity {
             }
         }
 
+    }
+}
+
+namespace ProjectCommunity.Events.PlayerEvents {
+    public delegate void OnPlayerXPLevelUp(Player p, XPSkill skill, int oldLevel, int newLevel);
+
+    public sealed class OnPlayerXPLevelUpEvent : IEvent<OnPlayerXPLevelUp> 
+    {      
+        public static void Call(Player p, XPSkill skill, int oldLevel, int newLevel) {
+            IEvent<OnPlayerXPLevelUp>[] items = handlers.Items;
+            for (int i = 0; i < items.Length; i++) 
+            {
+                try { items[i].method(p, skill, oldLevel, newLevel); } 
+                catch (Exception ex) { LogHandlerException(ex, items[i]); }
+            }
+        }
     }
 }

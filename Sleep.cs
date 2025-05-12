@@ -76,7 +76,7 @@ namespace ProjectCommunity {
         {
             if (DayNightCycle.timeOfDay < nightTime)
             {
-                pl.Message("%cIt's not night time yet!");
+                pl.Message("%cIt is not night time yet!");
                 return;
             }
 
