@@ -1,4 +1,5 @@
 ﻿//pluginref __Constants.dll
+//pluginref __ItemSystem.dll
 //pluginref DayNightCycle.dll
 
 // TODO: Farming doesn't work if the player isn't in the level at the time of new day
@@ -13,11 +14,44 @@ using MCGalaxy.SQL;
 using BlockID = System.UInt16;
 using DayOfWeek = ProjectCommunity.DayOfWeek;
 using Season = ProjectCommunity.Season;
+using ProjectCommunity.Items;
 
 namespace ProjectCommunity
 {
     public class Farming : Plugin
     {
+        public class WateringCanTool : ItemBase
+        {
+            public override void OnUse(Player p, ushort x, ushort y, ushort z, byte entity)
+            {
+                BlockID floorBlock = p.level.GetBlock(x, y, z);
+
+                if (floorBlock != BlockConstants.Dry_Farmland && floorBlock != BlockConstants.Wet_Farmland) return;
+
+                p.level.UpdateBlock(p, x, y, z, BlockConstants.Wet_Farmland);
+            }
+            public WateringCanTool() : base()
+            {
+
+            }
+        }
+
+        public class HoeTool : ItemBase
+        {
+            public override void OnUse(Player p, ushort x, ushort y, ushort z, byte entity)
+            {
+                BlockID floorBlock = p.level.GetBlock(x, y, z);
+
+                if (floorBlock != Block.Grass && floorBlock != Block.Dirt) return; // Only till dirt/grass/farmland
+
+                p.level.UpdateBlock(p, x, y, z, BlockConstants.Dry_Farmland);
+            }
+            public HoeTool() : base()
+            {
+
+            }
+        }
+
         public override string name { get { return "Farming"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.3"; } }
         public override string creator { get { return "Venk"; } }
@@ -27,6 +61,9 @@ namespace ProjectCommunity
             OnBlockChangingEvent.Register(HandleBlockChanged, Priority.Low);
             OnLevelDeletedEvent.Register(HandleLevelDeleted, Priority.Low);
             OnNewDayEvent.Register(HandleNewDay, Priority.Low);
+
+            ItemSystem.RegisterItem(BlockConstants.Watering_Can_Tool, new WateringCanTool());
+            ItemSystem.RegisterItem(BlockConstants.Hoe_Tool         , new HoeTool());
         }
 
         public override void Unload(bool shutdown)
@@ -34,6 +71,9 @@ namespace ProjectCommunity
             OnBlockChangingEvent.Unregister(HandleBlockChanged);
             OnLevelDeletedEvent.Unregister(HandleLevelDeleted);
             OnNewDayEvent.Unregister(HandleNewDay);
+
+            ItemSystem.UnregisterItem(BlockConstants.Watering_Can_Tool);
+            ItemSystem.UnregisterItem(BlockConstants.Hoe_Tool);
         }
 
         private void HandleLevelDeleted(string map)
@@ -64,75 +104,7 @@ namespace ProjectCommunity
                 // TODO: Add to inventory
             }
 
-            if (block == BlockConstants.Watering_Can_Tool)
-            {
-                p.RevertBlock(x, y, z);
-                cancel = true;
-
-                if (placing)
-                {
-                    // Only water farmland if placing on top of it
-                    BlockID floorBlock = p.level.GetBlock(x, (ushort)(y - 1), z);
-                    if (floorBlock != BlockConstants.Dry_Farmland && floorBlock != BlockConstants.Wet_Farmland) return;
-
-                    p.level.UpdateBlock(p, x, (ushort)(y - 1), z, BlockConstants.Wet_Farmland);
-                    return;
-                }
-
-                else
-                {
-                    // Only water farmland if breaking block above farmland or the farmland itself
-                    BlockID clickedBlock = p.level.GetBlock(x, y, z);
-                    BlockID floorBlock = p.level.GetBlock(x, (ushort)(y - 1), z);
-
-                    if (clickedBlock == BlockConstants.Dry_Farmland || clickedBlock == BlockConstants.Wet_Farmland)
-                    {
-                        p.level.UpdateBlock(p, x, y, z, BlockConstants.Wet_Farmland);
-                        return;
-                    }
-
-                    else if (floorBlock == BlockConstants.Dry_Farmland || floorBlock == BlockConstants.Wet_Farmland)
-                    {
-                        p.level.UpdateBlock(p, x, (ushort)(y - 1), z, BlockConstants.Wet_Farmland);
-                        return;
-                    }
-
-                    else return;
-                }
-            }
-
-            else if (block == BlockConstants.Hoe_Tool)
-            {
-                p.RevertBlock(x, y, z);
-                cancel = true;
-
-                if (placing)
-                {
-                    BlockID floorBlock = p.level.GetBlock(x, (ushort)(y - 1), z);
-                    if (floorBlock != Block.Grass && floorBlock != Block.Dirt) return; // Only till dirt/grass/farmland
-
-                    p.level.UpdateBlock(p, x, (ushort)(y - 1), z, BlockConstants.Dry_Farmland);
-                    return;
-                }
-
-                else
-                {
-                    BlockID clickedBlock = p.level.GetBlock(x, y, z);
-                    if (clickedBlock == BlockConstants.Dry_Farmland || clickedBlock == BlockConstants.Wet_Farmland)
-                    {
-                        p.RevertBlock(x, y, z);
-                        cancel = true;
-                    }
-
-                    if (clickedBlock != Block.Grass && clickedBlock != Block.Dirt) return; // Only till dirt/grass/farmland
-
-                    p.level.UpdateBlock(p, x, y, z, BlockConstants.Dry_Farmland);
-                }
-
-                return;
-            }
-
-            else if (IsSeed(block))
+            if (IsSeed(block))
             {
                 p.RevertBlock(x, y, z);
                 cancel = true;
