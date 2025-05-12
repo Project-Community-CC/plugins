@@ -163,7 +163,7 @@ namespace ProjectCommunity {
                 p.Message("%T/xp player %S- Get info about current xp for a player");
                 if (p.Rank < giveXPRank)
                     return;
-                p.Message("%T/xp give player skill XP %S- Give XP for skill");
+                p.Message("%T/xp give [player] [skill] [XP] %S- Give XP for skill");
             }
             private void GiveXP(Player p, Player target, string skillarg, string xparg="")
             {
@@ -203,18 +203,12 @@ namespace ProjectCommunity {
                     return;
                 }
 
-                if (args.Length < 3)
+                if (args.Length < 4)
                 {
                     Help(p);
                     return;
                 }
-
-                if (args.Length == 3)
-                {
-                    GiveXP(p, p, args[1], args[2]);
-                    return;
-                }
-
+                
                 Player target = PlayerInfo.FindMatches(p, args[1]);
                 if (target == null)
                 {
