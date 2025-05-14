@@ -13,7 +13,7 @@ namespace ProjectCommunity
 {
     public class Hunger : Plugin
     {
-        public override string name { get { return "_Hunger"; } }
+        public override string name { get { return "__Hunger"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.3"; } }
         public override string creator { get { return "morgana"; } }
 

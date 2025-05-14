@@ -1,4 +1,4 @@
-//pluginref _hunger.dll
+//pluginref __hunger.dll
 using MCGalaxy;
 using MCGalaxy.Events.PlayerEvents;
 namespace ProjectCommunity
