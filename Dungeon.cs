@@ -3,23 +3,26 @@
 
 // TODO:
 // - Neaten code
-// - Maybe some decorative vines/cobwebs on the roof
-// - Mossy stone brick noise/cloudy brush on the walls/roof for decoration
+// - Add mineable rocks/geodes
+// - Add decorative vines/cobwebs on the roof
+// - Stalagmites/stalactites
+// - Mossy stone brick noise/cloudy brush on the walls/roof for decoration?
 // - Dungeon presets: normal, ice, desert, fire?
-// - Automatic dungeon generation with random values
-// - Scaled sizes: lvl 1 = small, lvl 50 = medium, lvl 100 = big
+// - Monsters?
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 using MCGalaxy;
 using MCGalaxy.Events.PlayerEvents;
 using MCGalaxy.Network;
+using MCGalaxy.Tasks;
 
 using BlockID = System.UInt16;
 
-namespace Core
+namespace ProjectCommunity
 {
     public class Dungeon : Plugin
     {
@@ -53,6 +56,8 @@ namespace Core
                 if (x == ladderX && z == ladderZ)
                 {
                     p.Message("Clicked on exit ladder.");
+                    p.Extras.Remove("DUNGEON_LEVEL");
+                    Command.Find("Main").Use(p, "");
                 }
             }
 
@@ -66,8 +71,119 @@ namespace Core
                 if (x == ladderX && y == ladderY && z == ladderZ)
                 {
                     p.Message("Clicked on descend ladder.");
+                    int level = p.Extras.Contains("DUNGEON_LEVEL") ? (int)p.Extras["DUNGEON_LEVEL"] : 1;
+                    level++;
+                    p.Extras["DUNGEON_LEVEL"] = level;
+                    p.Message("Descending to dungeon level " + level + "...");
+
+                    CmdDungeon.GenerateDungeonForPlayer(p, level);
                 }
             }
+        }
+
+        public class FadeData
+        {
+            public Player p;
+            public bool isFadingFrom;
+            public float transparency;
+
+            public FadeData(Player _p, bool _isFadingFrom, float _transparency)
+            {
+                p = _p;
+                isFadingFrom = _isFadingFrom;
+                transparency = _transparency;
+            }
+        }
+
+        private static void FadeCallback(SchedulerTask task)
+        {
+            FadeData args = (FadeData)task.State;
+
+            if (args.transparency <= 0 && args.isFadingFrom)
+            {
+                task.Repeating = false;
+                return;
+            }
+
+            if (args.transparency >= 1 && !args.isFadingFrom)
+            {
+                task.Repeating = false;
+                return;
+            }
+
+            if (args.isFadingFrom) args.transparency -= 0.05f;
+            else args.transparency += 0.05f;
+
+            CinematicGui gui = new CinematicGui();
+            gui.hideCrosshair = false;
+            gui.hideHand = false;
+            gui.hideHotbar = false;
+            gui.barSize = 1;
+            gui.barColor = new ColorDesc(0, 0, 0);
+            gui.barColor.A = (byte)(255 * args.transparency);
+
+            if (!args.p.Session.SendCinematicGui(gui)) task.Repeating = false;
+        }
+
+        public static void FadeToBlack(Player p, Action callback)
+        {
+            FadeData data = new FadeData(p, false, 0f);
+            SchedulerTask task = new SchedulerTask(t =>
+            {
+                FadeData args = (FadeData)t.State;
+
+                if (args.transparency >= 1)
+                {
+                    t.Repeating = false;
+                    if (callback != null) callback();
+                    return;
+                }
+
+                args.transparency += 0.05f;
+
+                CinematicGui gui = new CinematicGui();
+                gui.hideCrosshair = false;
+                gui.hideHand = false;
+                gui.hideHotbar = false;
+                gui.barSize = 1;
+                gui.barColor = new ColorDesc(0, 0, 0);
+                gui.barColor.A = (byte)(255 * args.transparency);
+
+                if (!args.p.Session.SendCinematicGui(gui)) t.Repeating = false;
+            }, data, TimeSpan.FromMilliseconds(20), true);
+
+            p.CriticalTasks.Add(task);
+        }
+
+
+        public static void FadeFromBlack(Player p)
+        {
+            FadeData data = new FadeData(p, true, 1f); // isFadingFrom = true, starting from full black
+
+            SchedulerTask task = new SchedulerTask(t =>
+            {
+                FadeData args = (FadeData)t.State;
+
+                if (args.transparency <= 0)
+                {
+                    t.Repeating = false;
+                    return;
+                }
+
+                args.transparency -= 0.05f;
+
+                CinematicGui gui = new CinematicGui();
+                gui.hideCrosshair = false;
+                gui.hideHand = false;
+                gui.hideHotbar = false;
+                gui.barSize = 1;
+                gui.barColor = new ColorDesc(0, 0, 0);
+                gui.barColor.A = (byte)(255 * args.transparency);
+
+                if (!args.p.Session.SendCinematicGui(gui)) t.Repeating = false;
+            }, data, TimeSpan.FromMilliseconds(20), true);
+
+            p.CriticalTasks.Add(task);
         }
     }
 
@@ -78,7 +194,10 @@ namespace Core
 
         public override void Use(Player p, string message)
         {
-            string[] args = message.SplitSpaces();
+            p.Extras["DUNGEON_LEVEL"] = 1;
+            GenerateDungeonForPlayer(p, 1);
+
+            /*string[] args = message.SplitSpaces();
 
             if (args.Length < 7)
             {
@@ -100,7 +219,7 @@ namespace Core
             //generator.RunProceduralGeneration();
 
             CorridorFirstDungeonGenerator generator2 = new CorridorFirstDungeonGenerator(p, p.level, corridorLength, corridorWidth, corridorCount, roomPercent);
-            generator2.RunProceduralGeneration();
+            generator2.RunProceduralGeneration();*/
         }
 
         public override void Help(Player p)
@@ -109,6 +228,45 @@ namespace Core
         }
 
         public static Position startPosition;
+
+        public struct DungeonSettings
+        {
+            public int Iterations, Length, CorridorLength, CorridorWidth, CorridorCount;
+            public float RoomPercent;
+            public bool Random;
+
+            public DungeonSettings(int i, int l, bool r, int cl, int cw, int cc, float rp)
+            {
+                Iterations = i; Length = l; Random = r;
+                CorridorLength = cl; CorridorWidth = cw; CorridorCount = cc; RoomPercent = rp;
+            }
+        }
+
+        private static DungeonSettings GetSettingsForLevel(int level)
+        {
+            if (level <= 5) return new DungeonSettings(15, 30, true, 5, 4, 2, 100); // tiny
+            if (level <= 10) return new DungeonSettings(15, 30, true, 10, 4, 9, 80); // small
+            if (level <= 20) return new DungeonSettings(15, 30, true, 12, 6, 9, 8);  // medium
+            return new DungeonSettings(15, 30, true, 24, 8, 9, 8);                   // large
+        }
+
+        private static void test(Player p, int level)
+        {
+            DungeonSettings s = GetSettingsForLevel(level);
+            CmdDungeon.startPosition = new Position(p.level.Length / 2, 1, p.level.Width / 2);
+
+            var generator = new CorridorFirstDungeonGenerator(
+                p, p.level, s.CorridorLength, s.CorridorWidth, s.CorridorCount, s.RoomPercent);
+            generator.RunProceduralGeneration();
+        }
+
+        public static void GenerateDungeonForPlayer(Player p, int level)
+        {
+            Dungeon.FadeToBlack(p, delegate
+            {
+                test(p, level);
+            });
+        }
     }
 
     public class ProceduralGenerationAlgorithms
@@ -203,6 +361,10 @@ namespace Core
 
             Position spawnPos = new Position((visualiser.spawnPosition.X * 32) + 16, (visualiser.spawnPosition.Y * 32) + 128, (visualiser.spawnPosition.Z * 32) + 16);
             player.SendPosition(spawnPos, player.Rot);
+
+            Thread.Sleep(2300); // TODO: Make Dungeon.FadeFromBlack(player); wait until everything has been finished.
+                                // Without this Thread.Sleep(2300), there is no smooth FadeFromBlack gradiant
+            Dungeon.FadeFromBlack(player);
         }
 
         public List<Position> IncreaseCorridorBrush3by3(List<Position> corridor)
@@ -368,15 +530,59 @@ namespace Core
         }
     }
 
+    public class SimpleRandomWalkDungeonGenerator
+    {
+        public static int iterations = 20;
+        public static int walkLength = 20;
+        public static bool startRandomlyEachIteration = true;
+        public static Level lvl;
+
+        public SimpleRandomWalkDungeonGenerator(Level _lvl, int _iterations, int _walkLength, bool _startRandomlyEachIteration)
+        {
+            iterations = _iterations;
+            walkLength = _walkLength;
+            startRandomlyEachIteration = _startRandomlyEachIteration;
+            lvl = _lvl;
+        }
+
+        public virtual void RunProceduralGeneration()
+        {
+            HashSet<Position> floorPositions = RunRandomWalk(CmdDungeon.startPosition);
+
+            //TilemapVisualizer.Clear();
+            //TilemapVisualizer.PaintFloorTiles(floorPositions);
+            //TilemapVisualizer.CreateWalls(floorPositions);
+        }
+
+        public static HashSet<Position> RunRandomWalk(Position position)
+        {
+            var currentPosition = position;
+            HashSet<Position> floorPositions = new HashSet<Position>();
+
+            Random random = new Random();
+            for (int i = 0; i < iterations; i++)
+            {
+                var path = ProceduralGenerationAlgorithms.SimpleRandomWalk(currentPosition, walkLength);
+                floorPositions.UnionWith(path);
+
+                if (startRandomlyEachIteration)
+                {
+                    currentPosition = floorPositions.ElementAt(random.Next(0, floorPositions.Count));
+                }
+            }
+
+            return floorPositions;
+        }
+    }
+
     public class TilemapVisualizer
     {
         public Player player = null;
-        private BlockID floorBlock = Block.FromRaw(1);
-        //private BlockID wallBlock = Block.FromRaw(12);
+        private BlockID floorBlock = Block.Stone;
 
         private Random random = new Random();
 
-        private BufferedBlockSender bulk = new BufferedBlockSender();
+        private BufferedBlockSender bulk;
         public Position spawnPosition = new Position(0, 0, 0);
         private Level lvl = null;
 
@@ -384,6 +590,7 @@ namespace Core
         {
             player = _player;
             lvl = _player.level;
+            bulk = new BufferedBlockSender(_player);
         }
 
         public void PaintFloorTiles(IEnumerable<Position> floorPositions)
@@ -405,7 +612,7 @@ namespace Core
             int index = lvl.PosToInt((ushort)position.X, (ushort)position.Y, (ushort)position.Z);
             int roofIndex = lvl.PosToInt((ushort)position.X, (ushort)(position.Y + 7), (ushort)position.Z);
             bulk.Add(index, floorBlock);
-            bulk.Add(roofIndex, Block.FromRaw(65));
+            bulk.Add(roofIndex, Block.Gravel);
             //lvl.BroadcastChange((ushort)position.X, (ushort)position.Y, (ushort)position.Z, floorBlock);
         }
 
@@ -427,18 +634,18 @@ namespace Core
 
             foreach (var position in basicWallPositions)
             {
-                PaintSingleBasicWall(new Position(position.X, position.Y - 1, position.Z), Block.FromRaw(13));
-                PaintSingleBasicWall(new Position(position.X, position.Y + 5, position.Z), Block.FromRaw(13));
+                PaintSingleBasicWall(new Position(position.X, position.Y - 1, position.Z), Block.Gravel);
+                PaintSingleBasicWall(new Position(position.X, position.Y + 5, position.Z), Block.Gravel);
             }
 
             foreach (var position in floorAndWallPositions)
             {
-                PaintSingleBasicWall(position, Block.FromRaw(65));
-                PaintSingleBasicWall(new Position(position.X, position.Y + 1, position.Z), Block.FromRaw(65));
-                PaintSingleBasicWall(new Position(position.X, position.Y + 2, position.Z), Block.FromRaw(65));
-                PaintSingleBasicWall(new Position(position.X, position.Y + 3, position.Z), Block.FromRaw(65));
-                PaintSingleBasicWall(new Position(position.X, position.Y + 4, position.Z), Block.FromRaw(65));
-                PaintSingleBasicWall(new Position(position.X, position.Y + 5, position.Z), Block.FromRaw(65));
+                PaintSingleBasicWall(position, Block.Gravel);
+                PaintSingleBasicWall(new Position(position.X, position.Y + 1, position.Z), Block.Gravel);
+                PaintSingleBasicWall(new Position(position.X, position.Y + 2, position.Z), Block.Gravel);
+                PaintSingleBasicWall(new Position(position.X, position.Y + 3, position.Z), Block.Gravel);
+                PaintSingleBasicWall(new Position(position.X, position.Y + 4, position.Z), Block.Gravel);
+                PaintSingleBasicWall(new Position(position.X, position.Y + 5, position.Z), Block.Gravel);
             }
 
             /*var stroke = FindWallsInDirections2(floorAndWallPositions, Direction2D.cardinalDirectionsList);
@@ -555,7 +762,7 @@ namespace Core
                         for (int i = 1; i < 8; i++)
                         {
                             int ladderIndex = lvl.PosToInt((ushort)ladderPos.X, (ushort)(ladderPos.Y + i), (ushort)ladderPos.Z);
-                            if (i == 7) bulk.Add(ladderIndex, Block.FromRaw(34)); // Hole above the exit ladder appears as a black block
+                            if (i == 7) bulk.Add(ladderIndex, Block.FromRaw(106)); // Hole above the exit ladder appears as a black block
                             else bulk.Add(ladderIndex, Block.FromRaw(159)); // Exit ladder blocks
                         }
                     }
@@ -572,7 +779,7 @@ namespace Core
                 int holeIndex = lvl.PosToInt((ushort)ladderPos.X, (ushort)(ladderPos.Y - 1), (ushort)ladderPos.Z);
 
                 bulk.Add(ladderIndex, Block.FromRaw(159)); // Ladder block
-                bulk.Add(holeIndex, Block.Black); // Block hole
+                bulk.Add(holeIndex, Block.FromRaw(106)); // Block hole
                 player.Extras["DUNGEON_DESCEND_LADDER_POSITION"] = ladderPos.X + ";" + ladderPos.Y + ";" + ladderPos.Z;
             }
 
