@@ -1,4 +1,4 @@
-//pluginref _hunger.dll
+//pluginref __hunger.dll
 //pluginref __itemsystem.dll
 //pluginref __constants.dll
 using ProjectCommunity.Items.Food;
@@ -9,27 +9,29 @@ namespace ProjectCommunity.Items.Food
 {
     public class FoodBase : ItemBaseConsumeable
     {
-        int HungerReplenishAmount = 1;
-        public override void OnUse(Player p, ushort x, ushort y, ushort z, byte entity)
+        public int HungerReplenishAmount = 1;
+        public override bool OnUse(Player p, ushort x, ushort y, ushort z, byte entity)
         {
+            if (HungerReplenishAmount == 0) // Hunger disabled
+                return false;
+
+            if (Hunger.GetHunger(p) >= Hunger.MaxHunger)
+                return false;
+
             Hunger.AddHunger(p, HungerReplenishAmount);
-        }
-        public override bool CanUse(Player p)
-        {
-            return base.CanUse(p) && Hunger.GetHunger(p) < Hunger.MaxHunger;
+            return true;
         }
         public FoodBase(int replenishment=1) : base()
         {
             this.HungerReplenishAmount=replenishment;
         }
     }
-
 }
 namespace ProjectCommunity
 {
     public class Food : Plugin
     {
-        public override string name { get { return "Food"; } }
+        public override string name { get { return "_Food"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.3"; } }
         public override string creator { get { return "morgana"; } }
 
@@ -38,9 +40,12 @@ namespace ProjectCommunity
         {
             ItemSystem.RegisterItem(39, new FoodBase(2)); // Temp mushroom test
 
-            ItemSystem.RegisterItem(BlockConstants.Carrot, new FoodBase(2));
-            ItemSystem.RegisterItem(BlockConstants.Beet, new FoodBase(2));
-            ItemSystem.RegisterItem(BlockConstants.Potato, new FoodBase(2));
+            // Farming system uses these as seeds,
+            // so we register them as seeditems in farmingcrops 
+            // which are derived from foodbase and can be optionally made to be edible
+            //ItemSystem.RegisterItem(BlockConstants.Carrot, new FoodBase(2));
+            //ItemSystem.RegisterItem(BlockConstants.Beet, new FoodBase(2));
+            //ItemSystem.RegisterItem(BlockConstants.Potato, new FoodBase(2));
 
             ItemSystem.RegisterItem(BlockConstants.BakedPotato, new FoodBase(4));
             ItemSystem.RegisterItem(BlockConstants.Cake, new FoodBase(4));
@@ -58,9 +63,9 @@ namespace ProjectCommunity
         {
             ItemSystem.UnregisterItem(39);
 
-            ItemSystem.UnregisterItem(BlockConstants.Carrot);
-            ItemSystem.UnregisterItem(BlockConstants.Beet);
-            ItemSystem.UnregisterItem(BlockConstants.Potato);
+            //ItemSystem.UnregisterItem(BlockConstants.Carrot);
+            //ItemSystem.UnregisterItem(BlockConstants.Beet);
+            //ItemSystem.UnregisterItem(BlockConstants.Potato);
 
             ItemSystem.UnregisterItem(BlockConstants.BakedPotato);
             ItemSystem.UnregisterItem(BlockConstants.Cake);

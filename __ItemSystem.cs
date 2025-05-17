@@ -4,7 +4,6 @@ using MCGalaxy.Events.LevelEvents;
 using MCGalaxy.Events.PlayerEvents;
 using MCGalaxy.Events;
 using MCGalaxy.Maths;
-using MCGalaxy.Tasks;
 using MCGalaxy.Network;
 using MCGalaxy;
 using ProjectCommunity.Items;
@@ -13,7 +12,7 @@ namespace ProjectCommunity {
     public class ItemSystem : Plugin {
         public override string creator { get { return "morgana"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.1"; } }
-        public override string name { get { return "_ItemSystem"; } }
+        public override string name { get { return "__ItemSystem"; } }
 
         public static Dictionary<ushort, ItemBase> Items = new Dictionary<ushort, ItemBase>();
 
@@ -117,11 +116,11 @@ namespace ProjectCommunity.Items {
     {
         public ushort BlockId = 0;
         public bool CanPlaceWith=false;
-        public bool CanBreakWith=false;
+        public bool CanBreakWith=true;
 
-        public virtual void OnUse(Player p, ushort x, ushort y, ushort z, byte entity)
+        public virtual bool OnUse(Player p, ushort x, ushort y, ushort z, byte entity)
         {
-
+            return true;
         }
 
         public virtual bool CanUse(Player p)
@@ -129,24 +128,33 @@ namespace ProjectCommunity.Items {
             return true;
         }
 
+        public virtual void OnUsed(Player p, bool success)
+        {
+
+        }
+
         public void PlayerRightClicked(Player player, MouseButton button, MouseAction act, ushort yaw, ushort pitch, byte entity, ushort x, ushort y, ushort z, TargetBlockFace face)
         {
-            if (CanUse(player))
-                OnUse(player,x,y,z,entity);
+            if (!CanUse(player))
+                return;
+            
+            bool result = OnUse(player,x,y,z,entity);
+
+            OnUsed(player, result);
         }
         public void PlayerBlockPlaced(Player p, ushort x, ushort y, ushort z, ushort block, bool placing, ref bool cancel)
         {
-            if (!CanPlaceWith && (block == this.BlockId))
+            if (!CanPlaceWith && (block == this.BlockId) && placing)
             {
                 cancel = true;
                 p.RevertBlock(x,y,z);
             }
 
-            if (!CanBreakWith && (!placing || block==0))
+            /*if (!CanBreakWith && (!placing || block==0))
             {
                 cancel = true;
                 p.RevertBlock(x,y,z);
-            }
+            }*/
 
         }
 
@@ -157,11 +165,17 @@ namespace ProjectCommunity.Items {
 
     public class ItemBaseConsumeable : ItemBase 
     {
-        /*public override bool CanUse(Player p)
+        public override bool CanUse(Player p)
         {
-            return (Inventory.GetItemQuantity(p, this.BlockId) > 0);
-        }*/
+            return true;//Inventory.Has(p, this.BlockId);
+        }
 
+        public override void OnUsed(Player p, bool result)
+        {
+            //if (result)
+                //Inventory.RemoveItemQuantity(p, this.BlockId, 1);
+        }
+        
        
         public ItemBaseConsumeable()
         {

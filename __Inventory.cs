@@ -13,7 +13,7 @@ namespace ProjectCommunity
 {
     public class Inventory : Plugin
     {
-        public override string name { get { return "Inventories"; } }
+        public override string name { get { return "__Inventory"; } }
         public override string MCGalaxy_Version { get { return "1.9.5.3"; } }
         public override string creator { get { return "Venk"; } }
 
@@ -35,7 +35,7 @@ namespace ProjectCommunity
             new ColumnDesc("Quantity", ColumnType.Int32)
         };
 
-        public void AddItemToInventory(Player p, BlockID block, int quantity)
+        public static bool AddItemToInventory(Player p, BlockID block, int quantity=1)
         {
             int id = block;
             if (id >= 66) id -= 256; // Need to convert block if ID is over 66
@@ -65,7 +65,7 @@ namespace ProjectCommunity
                             newQuantity, p.truename, slot
                         );
 
-                        return;
+                        return true;
                     }
                 }
             }
@@ -75,14 +75,15 @@ namespace ProjectCommunity
                 if (!slotData.ContainsKey(i))
                 {
                     Database.AddRow("Inventories", "PlayerName, Slot, BlockID, Quantity", p.truename, i, id, quantity);
-                    return;
+                    return true;
                 }
             }
 
-            p.Message("&cYour inventory is full.");
+            //p.Message("&cYour inventory is full.");
+            return false;
         }
 
-        public void RemoveItemFromInventory(Player p, ushort blockID, int quantity)
+        public static bool RemoveItemFromInventory(Player p, ushort blockID, int quantity=1)
         {
             int id = blockID;
             if (id >= 66) id -= 256; // Need to convert block if ID is over 66
@@ -90,8 +91,8 @@ namespace ProjectCommunity
             List<string[]> rows = Database.GetRows("Inventories", "*", "WHERE PlayerName=@0", p.truename);
             if (rows.Count == 0)
             {
-                p.Message("&cYou do not have anything in your inventory.");
-                return;
+               // p.Message("&cYou do not have anything in your inventory.");
+                return false;
             }
 
             bool itemFound = false;
@@ -126,35 +127,41 @@ namespace ProjectCommunity
                             {
                                 Database.DeleteRows("Inventories", "WHERE PlayerName=@0 AND Slot=@1", p.truename, slot);
                             }
-                            return;
+                            return true;
                         }
 
                         else
                         {
                             p.Message("&cYou do not have enough of block ID " + id + " to remove.");
-                            return;
+                            return false;
                         }
                     }
                 }
             }
 
-            if (!itemFound)
-            {
-                p.Message("&cYou do not have any of block ID " + id + " in your inventory.");
-                return;
-            }
+            return itemFound;
         }
 
-        public int GetItemQuantity(Player p, ushort blockID)
+        public static int GetItemQuantity(Player p, ushort blockID)
         {
-            List<string[]> rows = Database.GetRows("Inventories", "*", "WHERE PlayerName=@0", p.truename);
+            int id = blockID;
+            if (id >= 66) id -= 256;
+            List<string[]> rows = Database.GetRows("Inventories", "*", "WHERE PlayerName=@0 AND BlockID=@1", p.truename, id);
             if (rows.Count == 0)
             {
-                p.Message("&cYou do not have anything in your inventory.");
+             //   p.Message("&cYou do not have anything in your inventory.");
                 return 0;
             }
+            int count = 0;
+            foreach(var row in rows)
+                count += int.Parse(row[3]);
 
-            return 0;
+            return count;
+        }
+
+        public static bool Has(Player p, ushort blockId)
+        {
+            return GetItemQuantity(p, blockId) > 0;
         }
     }
 
