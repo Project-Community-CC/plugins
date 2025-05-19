@@ -33,6 +33,7 @@ namespace ProjectCommunity
             Command.Register(new CmdListQuests());
             Command.Register(new CmdStartQuest());
             Command.Register(new CmdUpdateQuest());
+            Command.Register(new CmdSetActiveQuest());
         }
 
         public override void Unload(bool shutdown)
@@ -40,6 +41,7 @@ namespace ProjectCommunity
             Command.Unregister(Command.Find("ListQuests"));
             Command.Unregister(Command.Find("StartQuest"));
             Command.Unregister(Command.Find("UpdateQuest"));
+            Command.Unregister(Command.Find("SetActiveQuest"));
         }
 
         private ColumnDesc[] QuestProgressTable = new ColumnDesc[] {
@@ -47,6 +49,7 @@ namespace ProjectCommunity
             new ColumnDesc("QuestName", ColumnType.VarChar, 64),
             new ColumnDesc("Completed", ColumnType.Int32),
             new ColumnDesc("ProgressIndex", ColumnType.Int32),
+            new ColumnDesc("IsActive", ColumnType.Int32),
         };
     }
 
@@ -58,11 +61,13 @@ namespace ProjectCommunity
         public bool ObjectivesInOrder;
         public List<string> Objectives;
         public List<Vec3U16> ObjectiveCoords;
+        public List<string> ObjectiveEntities;
 
         public Quest()
         {
             Objectives = new List<string>();
             ObjectiveCoords = new List<Vec3U16>();
+            ObjectiveEntities = new List<string>();
         }
     }
 
@@ -92,31 +97,57 @@ namespace ProjectCommunity
 
                 quest.ObjectivesInOrder = bool.Parse(objectivesWrapper.Attributes["ordered"].Value);
 
-                // Handle nested Objectives (if incorrectly structured)
                 XmlNodeList objectiveNodes = objectivesWrapper.SelectNodes(".//Objective");
 
                 foreach (XmlNode objNode in objectiveNodes)
                 {
-                    string objText = objNode.InnerText.Trim();
+                    string objText = "";
+                    foreach (XmlNode child in objNode.ChildNodes)
+                    {
+                        if (child.NodeType == XmlNodeType.Text || child.NodeType == XmlNodeType.CDATA)
+                        {
+                            objText += child.InnerText.Trim();
+                        }
+                    }
                     quest.Objectives.Add(objText);
 
                     XmlNode locationNode = objNode["Location"];
-                    if (locationNode != null && locationNode.Attributes["x"] != null)
+                    if (locationNode != null)
                     {
-                        int x = int.Parse(locationNode.Attributes["x"].Value);
-                        int y = int.Parse(locationNode.Attributes["y"].Value);
-                        int z = int.Parse(locationNode.Attributes["z"].Value);
-                        quest.ObjectiveCoords.Add(new Vec3U16((ushort)x, (ushort)y, (ushort)z));
+                        // Check for coordinates
+                        if (locationNode.Attributes["x"] != null)
+                        {
+                            int x = int.Parse(locationNode.Attributes["x"].Value);
+                            int y = int.Parse(locationNode.Attributes["y"].Value);
+                            int z = int.Parse(locationNode.Attributes["z"].Value);
+                            quest.ObjectiveCoords.Add(new Vec3U16((ushort)x, (ushort)y, (ushort)z));
+                            quest.ObjectiveEntities.Add("");
+                        }
+
+                        // Check for entity
+                        else if (locationNode.Attributes["entity"] != null)
+                        {
+                            string entityName = locationNode.Attributes["entity"].Value;
+                            quest.ObjectiveEntities.Add(entityName);
+                            quest.ObjectiveCoords.Add(new Vec3U16(0, 0, 0));
+                        }
+                        else
+                        {
+                            quest.ObjectiveCoords.Add(new Vec3U16(0, 0, 0));
+                            quest.ObjectiveEntities.Add("");
+                        }
                     }
                     else
                     {
                         quest.ObjectiveCoords.Add(new Vec3U16(0, 0, 0));
+                        quest.ObjectiveEntities.Add("");
                     }
                 }
 
                 Quests.Add(quest);
             }
         }
+
     }
 
     public static class QuestProgressManager
@@ -139,6 +170,59 @@ namespace ProjectCommunity
 
             Database.AddRow("Quests", "Name, QuestName, Completed, ProgressIndex", p.name, questName, 0, 0);
             p.Message("%aStarted quest: &b" + questName);
+        }
+
+        public static void SetActiveQuest(Player p, string questName)
+        {
+            Quest quest = QuestManager.Quests.Find(q => q.Name == questName);
+            if (quest == null)
+            {
+                p.Message("%cQuest not found.");
+                return;
+            }
+
+            List<string[]> rows = Database.GetRows("Quests", "*", "WHERE Name=@0 AND QuestName=@1", p.name, questName);
+            if (rows.Count == 0)
+            {
+                p.Message("%cYou haven't started that quest yet.");
+                return;
+            }
+
+            Database.UpdateRows("Quests", "IsActive=0", "WHERE Name=@0 AND IsActive=1", p.name); // Deactivate the current quest
+
+            // Activate the new quest
+            Database.UpdateRows("Quests", "IsActive=1", "WHERE Name=@0 AND QuestName=@1", p.name, questName);
+            p.Message("%aActive quest set to: &b" + questName);
+        }
+
+        public static Vec3S32? GetActiveObjectiveTarget(Player p)
+        {
+            List<string[]> rows = Database.GetRows("Quests", "*", "WHERE Name=@0 AND IsActive=1", p.name);
+            if (rows.Count == 0) return null;
+
+            string questName = rows[0][1];
+            int progressIndex;
+            if (!int.TryParse(rows[0][3], out progressIndex)) return null;
+
+            Quest quest = QuestManager.Quests.Find(q => q.Name == questName);
+            if (quest == null || progressIndex >= quest.ObjectiveCoords.Count) return null;
+
+            if (!string.IsNullOrEmpty(quest.ObjectiveEntities[progressIndex]))
+            {
+                string entityName = quest.ObjectiveEntities[progressIndex];
+
+                PlayerBot bot = Matcher.FindBots(p, entityName);
+                if (bot == null) return null;
+                else
+                {
+                    return new Vec3S32(bot.Pos.X, bot.Pos.Y, bot.Pos.Z);
+                }
+            }
+            else
+            {
+                Vec3U16 coord = quest.ObjectiveCoords[progressIndex];
+                return new Vec3S32(coord.X * 32, coord.Y * 32, coord.Z * 32);
+            }
         }
 
         public static void UpdateProgress(Player p, string questName)
@@ -192,7 +276,6 @@ namespace ProjectCommunity
         }
     }
 
-
     public class CmdListQuests : Command2
     {
         public override string name { get { return "ListQuests"; } }
@@ -215,18 +298,20 @@ namespace ProjectCommunity
                     List<string[]> rows = Database.GetRows("Quests", "*", "WHERE Name=@0 AND QuestName=@1", p.name, quest.Name);
                     int progress = 0;
                     int completed = 0;
+                    bool isActive = false;
 
                     if (rows.Count > 0)
                     {
                         completed = int.Parse(rows[0][2]);
                         progress = int.Parse(rows[0][3]);
+
+                        isActive = rows[0][4] == "1";
                     }
 
-                    string status = "&8Not Started";
-                    if (completed == 1) status = "&aCompleted";
-                    else if (progress > 0) status = "&eIn Progress";
+                    string status = completed == 1 ? "&aCompleted" : "&eIn Progress";
+                    string activeTag = isActive ? " &6(Active)" : "";
 
-                    p.Message("&b" + quest.Name + " &f[" + status + "&f] " + progress + "/" + quest.Objectives.Count);
+                    p.Message("&b" + quest.Name + activeTag + " &f[" + status + "&f] " + progress + "/" + quest.Objectives.Count);
                     p.Message("&7" + quest.Description);
 
                     for (int i = 0; i < quest.Objectives.Count; i++)
@@ -234,10 +319,16 @@ namespace ProjectCommunity
                         string prefix = quest.ObjectivesInOrder ? (i + 1).ToString() + ". " : "- ";
                         string color = i < progress ? "&a" : "&f";
                         p.Message(color + prefix + quest.Objectives[i]);
+
+                        // Display location if it exists
+                        if (quest.ObjectiveCoords.Count > i && quest.ObjectiveCoords[i] != new Vec3U16(0, 0, 0))
+                        {
+                            Vec3U16 coord = quest.ObjectiveCoords[i];
+                            p.Message("&7Location: x=" + coord.X + " y=" + coord.Y + " z=" + coord.Z);
+                        }
                     }
                 }
             }
-
             else
             {
                 List<string[]> rows = QuestProgressManager.GetQuests(p, filter);
@@ -260,8 +351,11 @@ namespace ProjectCommunity
                         continue;
                     }
 
+                    bool isActive = row.Length >= 5 && row[4] == "1";
+                    string activeTag = isActive ? " &6(Active)" : "";
+
                     string status = completed == 1 ? "&aCompleted" : "&eIn Progress";
-                    p.Message("&b" + quest.Name + " &f[" + status + "&f] " + progress + "/" + quest.Objectives.Count);
+                    p.Message("&b" + quest.Name + activeTag + " &f[" + status + "&f] " + progress + "/" + quest.Objectives.Count);
                     p.Message("&7" + quest.Description);
 
                     for (int i = 0; i < quest.Objectives.Count; i++)
@@ -269,10 +363,18 @@ namespace ProjectCommunity
                         string prefix = quest.ObjectivesInOrder ? (i + 1).ToString() + ". " : "- ";
                         string color = i < progress ? "&a" : "&f";
                         p.Message(color + prefix + quest.Objectives[i]);
+
+                        // Display coordinates if present
+                        if (quest.ObjectiveCoords.Count > i && quest.ObjectiveCoords[i] != new Vec3U16(0, 0, 0))
+                        {
+                            Vec3U16 coord = quest.ObjectiveCoords[i];
+                            p.Message("&7Location: x=" + coord.X + " y=" + coord.Y + " z=" + coord.Z);
+                        }
                     }
                 }
             }
         }
+
 
         public override void Help(Player p)
         {
@@ -289,7 +391,7 @@ namespace ProjectCommunity
         {
             if (message.Length == 0)
             {
-                p.Message("%cUsage: /StartQuest [QuestName]");
+                Help(p);
                 return;
             }
 
@@ -311,7 +413,7 @@ namespace ProjectCommunity
         {
             if (message.Length == 0)
             {
-                p.Message("%cUsage: /UpdateQuest [QuestName]");
+                Help(p);
                 return;
             }
 
@@ -324,4 +426,25 @@ namespace ProjectCommunity
         }
     }
 
+    public class CmdSetActiveQuest : Command2
+    {
+        public override string name { get { return "SetActiveQuest"; } }
+        public override string type { get { return "game"; } }
+
+        public override void Use(Player p, string message)
+        {
+            if (message.Length == 0)
+            {
+                Help(p);
+                return;
+            }
+
+            QuestProgressManager.SetActiveQuest(p, message);
+        }
+
+        public override void Help(Player p)
+        {
+            p.Message("/SetActiveQuest [QuestName] - Marks a quest as your current active quest.");
+        }
+    }
 }

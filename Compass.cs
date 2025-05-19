@@ -1,5 +1,11 @@
+﻿// TODO: Sometimes the compass doesn't show ! for objectives?
+//pluginref _Quests.dll
 using MCGalaxy;
 using MCGalaxy.Events.PlayerEvents;
+using MCGalaxy.Maths;
+using MCGalaxy.Tasks;
+using System;
+using System.Collections.Generic;
 
 namespace ProjectCommunity
 {
@@ -7,38 +13,94 @@ namespace ProjectCommunity
     {
         public override string name { get { return "Compass"; } }
         public override string MCGalaxy_Version { get { return "1.9.3.3"; } }
-        public override string creator { get { return "123DontMessWitMe"; } }
-        public override int build { get { return 1; } }
+        public override string creator { get { return "123DontMessWitMe"; } } // Heavily modified by Venk
+
+        SchedulerTask compassTask;
 
         const string Cardinals =
-        ".NW......N.......NE......E.......SE......S.......SW......W......." +
-        "NW......N.......NE......E.......SE......S.......SW......W......." +
-        "NW......N.......NE......E.......SE......S.......SW......W.......";
+        "|       N       |       E       |       S       |       W       " +
+        "|       N       |       E       |       S       |       W       " +
+        "|       N       |       E       |       S       |       W       ";
 
         public override void Load(bool auto)
         {
-            OnPlayerMoveEvent.Register(OnPlayerMoveCall, Priority.Normal);
+            Server.MainScheduler.QueueRepeat(CompassTick, null, TimeSpan.Zero);
         }
 
         public override void Unload(bool auto)
         {
-            OnPlayerMoveEvent.Unregister(OnPlayerMoveCall);
+            Server.MainScheduler.Cancel(compassTask);
         }
 
-        public void OnPlayerMoveCall(Player p, Position next, byte yaw, byte pitch, ref bool cancel)
+        private void CompassTick(SchedulerTask task)
         {
-            if (!p.Supports(CpeExt.MessageTypes) || p.Extras.GetInt("COMPASS_VALUE") == yaw) return;
-            p.Extras["COMPASS_VALUE"] = yaw;
-            p.SendCpeMessage(CpeMessageType.Status2, GetCompassString(yaw)); // TODO: Add TopAnnouncement MessageType into the client
+            compassTask = task;
+
+            foreach (Player p in PlayerInfo.Online.Items)
+            {
+                if (!p.Supports(CpeExt.MessageTypes)) return;
+
+                Vec3S32 playerPos = new Vec3S32(p.Pos.X, p.Pos.Y, p.Pos.Z);
+                Vec3S32? target = QuestProgressManager.GetActiveObjectiveTarget(p);
+
+                if (target.HasValue)
+                {
+                    p.SendCpeMessage(CpeMessageType.Status2, GetCompassString(p.Rot.RotY, playerPos, target.Value));
+                }
+                else
+                {
+                    p.SendCpeMessage(CpeMessageType.Status2, GetCompassString(p.Rot.RotY, playerPos, new Vec3S32(-1, -1, -1)));
+                }
+            }
         }
 
-        public static string GetCompassString(int yaw)
+        private PlayerBot FindBots(Player p, Level lvl, string name)
         {
-            int centerOffset = (int)(yaw / 256f * 64f) + 64; // 64 is to center into repeated string
-            return string.Format("&S[&F{0}&C{1}&F{2}&S]",
-                Cardinals.Substring(centerOffset - 18, 17),
-                Cardinals.Substring(centerOffset - 1, 3),
-                Cardinals.Substring(centerOffset + 2, 17));
+            int matches;
+            return Matcher.Find(p, name, out matches, lvl.Bots.Items,
+                        null, b => b.name, "bots");
+        }
+
+        private string GetCompassString(int yaw, Vec3S32 playerPos, Vec3S32 targetPos)
+        {
+            int yawOffset = 32;
+            int adjustedYaw = (yaw + yawOffset) % 256;
+            int centerOffset = (int)(adjustedYaw / 256f * 64f) + 64;
+
+            int dx = targetPos.X - playerPos.X;
+            int dz = targetPos.Z - playerPos.Z;
+            float angle = (float)Math.Atan2(dx, -dz);
+            if (angle < 0) angle += (float)(2 * Math.PI);
+            float targetYaw = angle / (2f * (float)Math.PI) * 256f;
+            int targetOffset = (int)((targetYaw + yawOffset) / 256f * 64f) + 64;
+
+            string raw = Cardinals.Substring(centerOffset - 20, 41);
+            int relativeTarget = targetOffset - centerOffset + 20;
+            int facingHeadingIndex = 20; // Middle of compass is where player is facing
+
+            System.Text.StringBuilder compass = new System.Text.StringBuilder();
+
+            for (int i = 0; i < raw.Length; i++)
+            {
+                char ch = raw[i];
+
+                if (i == relativeTarget && targetPos != new Vec3S32(-1, -1, -1))
+                    compass.Append("&e!&7"); // Highlight quest objective location
+
+                else if (Math.Abs(i - facingHeadingIndex) <= 7 && ch != ' ' && ch != '|')
+                    compass.Append("&f").Append(ch).Append("&7");
+
+                else if (ch == '|')
+                    compass.Append("|");
+
+                else if (ch == ' ')
+                    compass.Append(" ");
+
+                else
+                    compass.Append(ch);
+            }
+
+            return "&S[&7" + compass.ToString() + "&S]";
         }
     }
 }
