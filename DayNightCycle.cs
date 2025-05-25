@@ -1,4 +1,17 @@
-﻿// 1 in-game day lasts 20 minutes real-time
+﻿/*
+    Note: 1 in-game day lasts 20 minutes real-time.
+
+    Times of day:
+        1. Dawn – 5:00-6:30 (texture pack changes to normal)
+        2. Sunrise – 6:30-7:30
+        3. Day – 7:30-17:30
+        4. Sunset – 17:30-18:30
+        5. Dusk – 18:30-19:30
+        6. Night – 19:30-20:30 (texture pack changes to night)
+        7. Midnight – 22:30-2:00
+        8. Night 2:00-5:00
+        (goes back to dawn)
+*/
 
 using System;
 using MCGalaxy;
@@ -23,6 +36,9 @@ namespace ProjectCommunity
 
         public static SchedulerTask Task;
 
+        public static string NormalTexturePackUrl = "https://dl.dropbox.com/scl/fi/llemo0m2a7usfi5fl3xuh/Hafen.zip?rlkey=2cossqjwrlzh24kp5teeeyn0k";
+        public static string NightTexturePackUrl = "https://dl.dropbox.com/scl/fi/8ucawyyh83uqw2vvhxhrc/HafenNight.zip?rlkey=v7zpnipbh0kmk2nlnkem8nzci";
+
         public override void Load(bool startup)
         {
             Command.Register(new CmdSetTime());
@@ -35,118 +51,216 @@ namespace ProjectCommunity
             Server.MainScheduler.Cancel(Task);
         }
 
-        private string TickToSky(int timeOfDay)
+        private bool IsTimeInRange(int timeOfDay, int startTicks, int endTicks)
         {
-            if (timeOfDay >= 0 && timeOfDay < 1000) return "#709DED";
-            if (timeOfDay >= 1000 && timeOfDay < 11834) return "#78A9FF";
-            if (timeOfDay >= 11834 && timeOfDay < 12542) return "#709DED";
-            if (timeOfDay >= 12542 && timeOfDay < 12610) return "#4C6BA2";
-            if (timeOfDay >= 12610 && timeOfDay < 12786) return "#486599";
-            if (timeOfDay >= 12786 && timeOfDay < 13000) return "#3C547F";
-            if (timeOfDay >= 13000 && timeOfDay < 13188) return "#2D4061";
-            if (timeOfDay >= 13188 && timeOfDay < 17843) return "#212E46";
-            if (timeOfDay >= 17843 && timeOfDay < 22300) return "#000000";
-            if (timeOfDay >= 22300 && timeOfDay < 23000) return "#212E46";
-            if (timeOfDay >= 23000 && timeOfDay < 23216) return "#304365";
-            if (timeOfDay >= 23216 && timeOfDay < 23460) return "#3C547F";
-            if (timeOfDay >= 23460 && timeOfDay < 23961) return "#4C6BA2";
-            if (timeOfDay >= 23961 && timeOfDay < 23992) return "#6F9CEC";
-            return "#709DED";
+            // Normalize timeOfDay to be within 0-23999
+            if (timeOfDay < 0) timeOfDay += 24000;
+            if (timeOfDay >= 24000) timeOfDay -= 24000;
+
+            return timeOfDay >= startTicks && timeOfDay <= endTicks;
         }
 
-        private string TickToCloud(int timeOfDay)
+        private string GetSkyColor(int timeOfDay)
         {
-            if (timeOfDay >= 0 && timeOfDay < 1000) return "#FFFFFF";
-            if (timeOfDay >= 1000 && timeOfDay < 11834) return "#FFFFFF";
-            if (timeOfDay >= 11834 && timeOfDay < 12542) return "#FFFFFF";
-            if (timeOfDay >= 12542 && timeOfDay < 12610) return "#926864";
-            if (timeOfDay >= 12610 && timeOfDay < 12786) return "#926864";
-            if (timeOfDay >= 12786 && timeOfDay < 13000) return "#926864";
-            if (timeOfDay >= 13000 && timeOfDay < 13188) return "#2D4061";
-            if (timeOfDay >= 13188 && timeOfDay < 17843) return "#212E46";
-            if (timeOfDay >= 17843 && timeOfDay < 22300) return "#000000";
-            if (timeOfDay >= 22300 && timeOfDay < 23000) return "#212E46";
-            if (timeOfDay >= 23000 && timeOfDay < 23216) return "#D15F36";
-            if (timeOfDay >= 23216 && timeOfDay < 23460) return "#D15F36";
-            if (timeOfDay >= 23460 && timeOfDay < 23961) return "#D15F36";
-            if (timeOfDay >= 23961 && timeOfDay < 23992) return "#D15F36";
+            // Dawn: 5:00 - 6:30
+            if (IsTimeInRange(timeOfDay, 5000, 6500))
+                return "#836668";
+
+            // Sunrise: 6:30 - 7:30
+            if (IsTimeInRange(timeOfDay, 6500, 7500))
+                return "#836668";
+
+            // Day: 7:30 - 17:30
+            if (IsTimeInRange(timeOfDay, 7500, 17500))
+                return "#6BB3FF";
+
+            // Sunset: 17:30 - 18:30
+            if (IsTimeInRange(timeOfDay, 17500, 18500))
+                return "#836668";
+
+            // Dusk: 18:30 - 19:30
+            if (IsTimeInRange(timeOfDay, 18500, 19500))
+                return "#836668";
+
+            // Night: 19:30 - 22:30
+            if (IsTimeInRange(timeOfDay, 19500, 22500))
+                return "#00407B";
+
+            // Midnight: 22:30 - 2:00
+            if (IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000))
+                return "#070A23";
+
+            // Night: 2:00 - 5:00
+            if (IsTimeInRange(timeOfDay, 2000, 5000))
+                return "#00407B";
+
+            return "#6BB3FF";
+        }
+
+        private string GetFogColor(int timeOfDay)
+        {
+            // Dawn: 5:00 - 6:30
+            if (IsTimeInRange(timeOfDay, 5000, 6500))
+                return "#D36538";
+
+            // Sunrise: 6:30 - 7:30
+            if (IsTimeInRange(timeOfDay, 6300, 7500))
+                return "#FFA322";
+
+            // Day: 7:30 - 17:30
+            if (IsTimeInRange(timeOfDay, 7500, 17500))
+                return "#FFFFFF";
+
+            // Sunset: 17:30 - 18:30
+            if (IsTimeInRange(timeOfDay, 17500, 18500))
+                return "#FFA322";
+
+            // Dusk: 18:30 - 19:30
+            if (IsTimeInRange(timeOfDay, 18500, 19500))
+                return "#D36538";
+
+            // Night: 19:30 - 22:30
+            if (IsTimeInRange(timeOfDay, 19500, 22500))
+                return "#00407B";
+
+            // Midnight: 22:30 - 2:00
+            if (IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000))
+                return "#131947";
+
+            // Night: 2:00 - 5:00
+            if (IsTimeInRange(timeOfDay, 2000, 5000))
+                return "#00407B";
+
             return "#FFFFFF";
         }
 
-        private string TickToFog(int timeOfDay)
+        private string GetCloudColor(int timeOfDay)
         {
-            if (timeOfDay >= 0 && timeOfDay < 1000) return "#FFFFFF";
-            if (timeOfDay >= 1000 && timeOfDay < 11834) return "#FFFFFF";
-            if (timeOfDay >= 11834 && timeOfDay < 12542) return "#FFFFFF";
-            if (timeOfDay >= 12542 && timeOfDay < 12610) return "#D15F36";
-            if (timeOfDay >= 12610 && timeOfDay < 12786) return "#D15F36";
-            if (timeOfDay >= 12786 && timeOfDay < 13000) return "#D15F36";
-            if (timeOfDay >= 13000 && timeOfDay < 13188) return "#264559";
-            if (timeOfDay >= 13188 && timeOfDay < 17843) return "#264559";
-            if (timeOfDay >= 17843 && timeOfDay < 22300) return "#264559";
-            if (timeOfDay >= 22300 && timeOfDay < 23000) return "#264559";
-            if (timeOfDay >= 23000 && timeOfDay < 23216) return "#D15F36";
-            if (timeOfDay >= 23216 && timeOfDay < 23460) return "#D15F36";
-            if (timeOfDay >= 23460 && timeOfDay < 23961) return "#D15F36";
-            if (timeOfDay >= 23961 && timeOfDay < 23992) return "#D15F36";
+            // Dawn: 5:00 - 6:30
+            if (IsTimeInRange(timeOfDay, 5000, 6500))
+                return "#836668";
+
+            // Sunrise: 6:30 - 7:30
+            if (IsTimeInRange(timeOfDay, 6500, 7500))
+                return "#9A6551";
+
+            // Day: 7:30 - 17:30
+            if (IsTimeInRange(timeOfDay, 7500, 17500))
+                return "#DBFEFF";
+
+            // Sunset: 17:30 - 18:30
+            if (IsTimeInRange(timeOfDay, 17500, 18500))
+                return "#9A6551";
+
+            // Dusk: 18:30 - 19:30
+            if (IsTimeInRange(timeOfDay, 18500, 19500))
+                return "#836668";
+
+            // Night: 19:30 - 22:30
+            if (IsTimeInRange(timeOfDay, 19500, 22500))
+                return "#065784";
+
+            // Midnight: 22:30 - 2:00
+            if (IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000))
+                return "#1E223A";
+
+            // Night: 2:00 - 5:00
+            if (IsTimeInRange(timeOfDay, 2000, 5000))
+                return "#065784";
+
+            return "#DBFEFF";
+        }
+
+        private string GetShadowColor(int timeOfDay)
+        {
+            // Dawn: 5:00 - 6:30
+            if (IsTimeInRange(timeOfDay, 5000, 6500))
+                return "#30304B";
+
+            // Sunrise: 6:30 - 7:30
+            if (IsTimeInRange(timeOfDay, 6500, 7500))
+                return "#46444C";
+
+            // Day: 7:30 - 17:30
+            if (IsTimeInRange(timeOfDay, 7500, 17500))
+                return "#88888A";
+
+            // Sunset: 17:30 - 18:30
+            if (IsTimeInRange(timeOfDay, 17500, 18500))
+                return "#46444C";
+
+            // Dusk: 18:30 - 19:30
+            if (IsTimeInRange(timeOfDay, 18500, 19500))
+                return "#30304B";
+
+            // Night: 19:30 - 22:30
+            if (IsTimeInRange(timeOfDay, 19500, 22500))
+                return "#293654";
+
+            // Midnight: 22:30 - 2:00
+            if (IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000))
+                return "#0F0F19";
+
+            // Night: 2:00 - 5:00
+            if (IsTimeInRange(timeOfDay, 2000, 5000))
+                return "#293654";
+
+            return "#88888A";
+        }
+
+
+        private string GetSunlightColor(int timeOfDay)
+        {
+            // Dawn: 5:00 - 6:30
+            if (IsTimeInRange(timeOfDay, 5000, 6500))
+                return "#525163";
+
+            // Sunrise: 6:30 - 7:30
+            if (IsTimeInRange(timeOfDay, 6500, 7500))
+                return "#7F6C60";
+
+            // Day: 7:30 - 17:30
+            if (IsTimeInRange(timeOfDay, 7500, 17500))
+                return "#FFFFFF";
+
+            // Sunset: 17:30 - 18:30
+            if (IsTimeInRange(timeOfDay, 17500, 18500))
+                return "#7F6C60";
+
+            // Dusk: 18:30 - 19:30
+            if (IsTimeInRange(timeOfDay, 18500, 19500))
+                return "#525163";
+
+            // Night: 19:30 - 22:30
+            if (IsTimeInRange(timeOfDay, 19500, 22500))
+                return "#2F3E60";
+
+            // Midnight: 22:30 - 2:00
+            if (IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000))
+                return "#181828";
+
+            // Night: 2:00 - 5:00
+            if (IsTimeInRange(timeOfDay, 2000, 5000))
+                return "#2F3E60";
+
             return "#FFFFFF";
         }
 
-        private string TickToSun(int timeOfDay)
+        private string GetTimeEmoji()
         {
-            if (timeOfDay >= 0 && timeOfDay < 1000) return "#FFFFFF";
-            if (timeOfDay >= 1000 && timeOfDay < 11834) return "#FFFFFF";
-            if (timeOfDay >= 11834 && timeOfDay < 12542) return "#FFFFFF";
-            if (timeOfDay >= 12542 && timeOfDay < 12610) return "#FFD580";
-            if (timeOfDay >= 12610 && timeOfDay < 12786) return "#FFAA55";
-            if (timeOfDay >= 12786 && timeOfDay < 13000) return "#CC8844";
-            if (timeOfDay >= 13000 && timeOfDay < 13188) return "#886644";
-            if (timeOfDay >= 13188 && timeOfDay < 17843) return "#444444";
-            if (timeOfDay >= 17843 && timeOfDay < 22300) return "#222222";
-            if (timeOfDay >= 22300 && timeOfDay < 23000) return "#444444";
-            if (timeOfDay >= 23000 && timeOfDay < 23216) return "#886644";
-            if (timeOfDay >= 23216 && timeOfDay < 23460) return "#FFAA55";
-            if (timeOfDay >= 23460 && timeOfDay < 23961) return "#FFD580";
-            if (timeOfDay >= 23961 && timeOfDay < 23992) return "#FFFFFF";
-            return "#FFFFFF";
-        }
-
-        private string TickToShadow(int timeOfDay)
-        {
-            if (timeOfDay >= 0 && timeOfDay < 1000) return "#BBBBBB";
-            if (timeOfDay >= 1000 && timeOfDay < 11834) return "#BBBBBB";
-            if (timeOfDay >= 11834 && timeOfDay < 12542) return "#BBBBBB";
-            if (timeOfDay >= 12542 && timeOfDay < 12610) return "#CCB377";
-            if (timeOfDay >= 12610 && timeOfDay < 12786) return "#BB7733";
-            if (timeOfDay >= 12786 && timeOfDay < 13000) return "#996622";
-            if (timeOfDay >= 13000 && timeOfDay < 13188) return "#664411";
-
-            // Night: shadow = sun (no sun = no shadow difference)
-            if (timeOfDay >= 13188 && timeOfDay < 17843) return "#444444";
-            if (timeOfDay >= 17843 && timeOfDay < 22300) return "#222222";
-            if (timeOfDay >= 22300 && timeOfDay < 23000) return "#444444";
-            if (timeOfDay >= 23000 && timeOfDay < 23216) return "#664411";
-            if (timeOfDay >= 23216 && timeOfDay < 23460) return "#BB7733";
-            if (timeOfDay >= 23460 && timeOfDay < 23961) return "#CCB377";
-            if (timeOfDay >= 23961 && timeOfDay < 23992) return "#BBBBBB";
-
-            return "#BBBBBB";
-        }
-
-        private string GetTimeEmoji(int ticks)
-        {
-            if ((ticks >= 12542 && ticks < 13188) || (ticks >= 23000 && ticks < 23460))
+            if (IsTimeInRange(timeOfDay, 5000, 7500) || IsTimeInRange(timeOfDay, 17500, 19500))
                 return "◘"; // Sunrise/Sunset
-            if ((ticks >= 1000 && ticks < 12542) || (ticks >= 23460 || ticks < 1000))
+            if (IsTimeInRange(timeOfDay, 7500, 17500))
                 return "♠"; // Day
             return "•";     // Night
         }
 
         private string GetGameTimeString(int ticks)
         {
-            ticks = ticks % 24000;
+            // Convert ticks to hours and minutes
+            int inGameTime = (ticks * 24) / 24000; // Convert ticks to in-game hours
+            int totalMinutes = (ticks * 24 * 60) / 24000; // Convert ticks to in-game minutes
 
-            int totalMinutes = ((ticks + 6000) % 24000) * 60 / 1000;
             int hour = totalMinutes / 60;
             int minute = totalMinutes % 60;
 
@@ -159,9 +273,9 @@ namespace ProjectCommunity
             if (hour == 0) hour = 12;
 
             string timeStr = string.Format("{0}:{1:D2}{2}", hour, minute, period);
-            string emoji = GetTimeEmoji(ticks);
+            string emoji = GetTimeEmoji();
 
-            return string.Format("{0} {1}, {2} (Season: {3})", emoji, currentDay, timeStr, currentSeason);
+            return string.Format("{0} {1}, {2} (Season: {3})", emoji, currentDay, timeStr, currentSeason) + " " + ticks;
         }
 
         private void DoDayNightCycle(SchedulerTask task)
@@ -185,6 +299,14 @@ namespace ProjectCommunity
 
             else timeOfDay += 20;
 
+            ChangeEnvironment();
+            Task = task;
+        }
+
+        private bool isNightTime = false;
+
+        public void ChangeEnvironment()
+        {
             Player[] players = PlayerInfo.Online.Items;
 
             foreach (Player pl in players)
@@ -193,29 +315,53 @@ namespace ProjectCommunity
                 pl.SendCpeMessage(CpeMessageType.Status3, GetGameTimeString(timeOfDay) + " ");
 
                 ColorDesc sky = default(ColorDesc);
-                if (!CommandParser.GetHex(pl, TickToSky(timeOfDay), ref sky)) return;
+                if (!CommandParser.GetHex(pl, GetSkyColor(timeOfDay), ref sky)) return;
 
                 ColorDesc cloud = default(ColorDesc);
-                if (!CommandParser.GetHex(pl, TickToCloud(timeOfDay), ref cloud)) return;
+                if (!CommandParser.GetHex(pl, GetCloudColor(timeOfDay), ref cloud)) return;
 
                 ColorDesc fog = default(ColorDesc);
-                if (!CommandParser.GetHex(pl, TickToFog(timeOfDay), ref fog)) return;
+                if (!CommandParser.GetHex(pl, GetFogColor(timeOfDay), ref fog)) return;
 
                 ColorDesc shadow = default(ColorDesc);
-                if (!CommandParser.GetHex(pl, TickToShadow(timeOfDay), ref shadow)) return;
+                if (!CommandParser.GetHex(pl, GetShadowColor(timeOfDay), ref shadow)) return;
 
                 ColorDesc sun = default(ColorDesc);
-                if (!CommandParser.GetHex(pl, TickToSun(timeOfDay), ref sun)) return;
+                if (!CommandParser.GetHex(pl, GetSunlightColor(timeOfDay), ref sun)) return;
 
                 pl.Send(Packet.EnvColor(0, sky.R, sky.G, sky.B));
                 pl.Send(Packet.EnvColor(1, cloud.R, cloud.G, cloud.B));
                 pl.Send(Packet.EnvColor(2, fog.R, fog.G, fog.B));
                 pl.Send(Packet.EnvColor(3, shadow.R, shadow.G, shadow.B));
                 pl.Send(Packet.EnvColor(4, sun.R, sun.G, sun.B));
-                pl.Send(Packet.EnvColor(5, sun.R, sun.G, sun.B));
+
+                // No skybox tint for night time as the night skybox is already tinted
+                if (IsTimeInRange(timeOfDay, 19500, 22500) || IsTimeInRange(timeOfDay, 2000, 5000))
+                    pl.Send(Packet.EnvColor(5, 256, 256, 256));
+                else pl.Send(Packet.EnvColor(5, sun.R, sun.G, sun.B));
             }
 
-            Task = task;
+            // When it's night time, change the server's texture pack and reload for all players
+            if (!isNightTime && (IsTimeInRange(timeOfDay, 19500, 22500) || IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000) || IsTimeInRange(timeOfDay, 2000, 5000)))
+            {
+                isNightTime = true;
+                Server.Config.DefaultTexture = NightTexturePackUrl;
+                MCGalaxy.SrvProperties.Save();
+
+                foreach (Player pl in players)
+                    pl.SendCurrentTextures();
+
+
+            }
+            else if (isNightTime && (IsTimeInRange(timeOfDay, 5000, 6500) || IsTimeInRange(timeOfDay, 6500, 7500) || IsTimeInRange(timeOfDay, 7500, 17500)))
+            {
+                isNightTime = false;
+                Server.Config.DefaultTexture = NormalTexturePackUrl;
+                MCGalaxy.SrvProperties.Save();
+
+                foreach (Player pl in players)
+                    pl.SendCurrentTextures();
+            }
         }
     }
 
@@ -271,15 +417,49 @@ namespace ProjectCommunity
         public override void Use(Player p, string message, CommandData data)
         {
             if (message.Length == 0) { Help(p); return; }
+
             string[] args = message.SplitSpaces();
 
-            DayNightCycle.timeOfDay = int.Parse(args[0]);
-            p.Message("%STime set to: %b" + DayNightCycle.timeOfDay + "%S.");
+            if (args.Length > 0)
+            {
+                int timeOfDay = 0;
+                if (int.TryParse(args[0], out timeOfDay))
+                {
+                    if (timeOfDay < 0 || timeOfDay >= 24000)
+                    {
+                        p.Message("%CInvalid tick value. Must be between 0 and 23999.");
+                        return;
+                    }
+                }
+                else
+                {
+                    string[] timeParts = args[0].Split(':');
+                    int hours, minutes;
+                    if (timeParts.Length == 2 && int.TryParse(timeParts[0], out hours) && int.TryParse(timeParts[1], out minutes))
+                    {
+                        if (hours < 0 || hours >= 24 || minutes < 0 || minutes >= 60)
+                        {
+                            p.Message("%CInvalid time format. Hours must be between 0 and 23, and minutes must be between 0 and 59.");
+                            return;
+                        }
+
+                        timeOfDay = hours * 1000 + (int)(minutes * 16.6667);
+                    }
+                    else
+                    {
+                        p.Message("%CInvalid time format. Use either ticks (e.g., 3000) or H:MM format (e.g., 7:15).");
+                        return;
+                    }
+                }
+
+                DayNightCycle.timeOfDay = timeOfDay;
+                p.Message("%STime set to: %b" + DayNightCycle.timeOfDay + "%S.");
+            }
         }
 
         public override void Help(Player p)
         {
-            p.Message("%T/SetTime [tick] - %HSets the day-night cycle time to [tick].");
+            p.Message("%T/SetTime [tick or H:MM] - %HSets the day-night cycle time to either a tick value or a time in H:MM format.");
         }
     }
 }
