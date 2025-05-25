@@ -1,4 +1,6 @@
-﻿/*
+﻿//reference System.Core.dll
+
+/*
     Note: 1 in-game day lasts 20 minutes real-time.
 
     Times of day:
@@ -14,6 +16,8 @@
 */
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using MCGalaxy;
 using MCGalaxy.Commands;
 using MCGalaxy.Events;
@@ -50,6 +54,8 @@ namespace ProjectCommunity
             Command.Unregister(Command.Find("SetTime"));
             Server.MainScheduler.Cancel(Task);
         }
+
+        private static TimeStage currentStage = TimeStage.Dawn;
 
         private bool IsTimeInRange(int timeOfDay, int startTicks, int endTicks)
         {
@@ -208,7 +214,6 @@ namespace ProjectCommunity
             return "#88888A";
         }
 
-
         private string GetSunlightColor(int timeOfDay)
         {
             // Dawn: 5:00 - 6:30
@@ -278,6 +283,13 @@ namespace ProjectCommunity
             return string.Format("{0} {1}, {2} (Season: {3})", emoji, currentDay, timeStr, currentSeason);
         }
 
+        private int cpeTickCounter = 0; // Non-standard clients experience lag when sending too many CPE packets. We'll use this value to send every 5 ticks instead of every tick.
+
+        private List<string> nonStandardClients = new List<string>()
+        {
+            "Web", "Mobile", "3DS", "Android"
+        };
+
         private void DoDayNightCycle(SchedulerTask task)
         {
             OnDayNightCycleTickEvent.Call(timeOfDay, currentSeason, currentDay);
@@ -299,11 +311,49 @@ namespace ProjectCommunity
 
             else timeOfDay += 20;
 
-            ChangeEnvironment();
+            TimeStage newStage = GetCurrentStage(timeOfDay);
+
+            if (newStage != currentStage)
+            {
+                currentStage = newStage;
+                ChangeEnvironment(); // Only send updates on stage change
+            }
+
+            Player[] players = PlayerInfo.Online.Items;
+
+            cpeTickCounter++;
+
+            foreach (Player pl in players)
+            {
+                if (!pl.level.Config.MOTD.Contains("daynightcycle=true")) continue;
+
+                string app = pl.Session.ClientName();
+                bool isNonStandardClient = nonStandardClients.Any(tag => app.Contains(tag));
+
+                if (isNonStandardClient && cpeTickCounter % 5 != 0)
+                    continue; // Skip this tick for non-standard clients
+
+                pl.SendCpeMessage(CpeMessageType.Status3, GetGameTimeString(timeOfDay) + " ");
+            }
+
             Task = task;
         }
 
         private bool isNightTime = false;
+
+        private TimeStage GetCurrentStage(int timeOfDay)
+        {
+            if (IsTimeInRange(timeOfDay, 5000, 6500)) return TimeStage.Dawn;
+            if (IsTimeInRange(timeOfDay, 6500, 7500)) return TimeStage.Sunrise;
+            if (IsTimeInRange(timeOfDay, 7500, 17500)) return TimeStage.Day;
+            if (IsTimeInRange(timeOfDay, 17500, 18500)) return TimeStage.Sunset;
+            if (IsTimeInRange(timeOfDay, 18500, 19500)) return TimeStage.Dusk;
+            if (IsTimeInRange(timeOfDay, 19500, 22500)) return TimeStage.Night;
+            if (IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000)) return TimeStage.Midnight;
+            if (IsTimeInRange(timeOfDay, 2000, 5000)) return TimeStage.Night2;
+
+            return TimeStage.Day;
+        }
 
         public void ChangeEnvironment()
         {
@@ -312,7 +362,25 @@ namespace ProjectCommunity
             foreach (Player pl in players)
             {
                 if (!pl.level.Config.MOTD.Contains("daynightcycle=true")) continue;
-                pl.SendCpeMessage(CpeMessageType.Status3, GetGameTimeString(timeOfDay) + " ");
+
+                // When it's night time, change the server's texture pack and reload for all players
+                if (!isNightTime && (IsTimeInRange(timeOfDay, 19500, 22500) || IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000) || IsTimeInRange(timeOfDay, 2000, 5000)))
+                {
+                    isNightTime = true;
+                    Server.Config.DefaultTexture = NightTexturePackUrl;
+                    MCGalaxy.SrvProperties.Save();
+
+                    pl.SendCurrentTextures();
+                }
+
+                else if (isNightTime && (IsTimeInRange(timeOfDay, 5000, 6500) || IsTimeInRange(timeOfDay, 6500, 7500) || IsTimeInRange(timeOfDay, 7500, 17500)))
+                {
+                    isNightTime = false;
+                    Server.Config.DefaultTexture = NormalTexturePackUrl;
+                    MCGalaxy.SrvProperties.Save();
+
+                    pl.SendCurrentTextures();
+                }
 
                 ColorDesc sky = default(ColorDesc);
                 if (!CommandParser.GetHex(pl, GetSkyColor(timeOfDay), ref sky)) return;
@@ -336,31 +404,9 @@ namespace ProjectCommunity
                 pl.Send(Packet.EnvColor(4, sun.R, sun.G, sun.B));
 
                 // No skybox tint for night time as the night skybox is already tinted
-                if (IsTimeInRange(timeOfDay, 19500, 22500) || IsTimeInRange(timeOfDay, 2000, 5000))
+                if (IsTimeInRange(timeOfDay, 19500, 22500) || IsTimeInRange(timeOfDay, 2000, 4999))
                     pl.Send(Packet.EnvColor(5, 256, 256, 256));
                 else pl.Send(Packet.EnvColor(5, sun.R, sun.G, sun.B));
-            }
-
-            // When it's night time, change the server's texture pack and reload for all players
-            if (!isNightTime && (IsTimeInRange(timeOfDay, 19500, 22500) || IsTimeInRange(timeOfDay, 22500, 24000) || IsTimeInRange(timeOfDay, 0, 2000) || IsTimeInRange(timeOfDay, 2000, 5000)))
-            {
-                isNightTime = true;
-                Server.Config.DefaultTexture = NightTexturePackUrl;
-                MCGalaxy.SrvProperties.Save();
-
-                foreach (Player pl in players)
-                    pl.SendCurrentTextures();
-
-
-            }
-            else if (isNightTime && (IsTimeInRange(timeOfDay, 5000, 6500) || IsTimeInRange(timeOfDay, 6500, 7500) || IsTimeInRange(timeOfDay, 7500, 17500)))
-            {
-                isNightTime = false;
-                Server.Config.DefaultTexture = NormalTexturePackUrl;
-                MCGalaxy.SrvProperties.Save();
-
-                foreach (Player pl in players)
-                    pl.SendCurrentTextures();
             }
         }
     }
@@ -382,6 +428,18 @@ namespace ProjectCommunity
         Thursday = 4,
         Friday = 5,
         Saturday = 6
+    }
+
+    public enum TimeStage
+    {
+        Dawn,
+        Sunrise,
+        Day,
+        Sunset,
+        Dusk,
+        Night,
+        Midnight,
+        Night2
     }
 
     public delegate void OnNewDay(Season season, DayOfWeek day);
