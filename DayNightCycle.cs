@@ -55,9 +55,9 @@ namespace ProjectCommunity
             Server.MainScheduler.Cancel(Task);
         }
 
-        private static TimeStage currentStage = TimeStage.Dawn;
+        public static TimeStage currentStage = TimeStage.Dawn;
 
-        private bool IsTimeInRange(int timeOfDay, int startTicks, int endTicks)
+        public static bool IsTimeInRange(int timeOfDay, int startTicks, int endTicks)
         {
             // Normalize timeOfDay to be within 0-23999
             if (timeOfDay < 0) timeOfDay += 24000;
@@ -339,9 +339,9 @@ namespace ProjectCommunity
             Task = task;
         }
 
-        private bool isNightTime = false;
+        public bool isNightTime = false;
 
-        private TimeStage GetCurrentStage(int timeOfDay)
+        public TimeStage GetCurrentStage(int timeOfDay)
         {
             if (IsTimeInRange(timeOfDay, 5000, 6500)) return TimeStage.Dawn;
             if (IsTimeInRange(timeOfDay, 6500, 7500)) return TimeStage.Sunrise;

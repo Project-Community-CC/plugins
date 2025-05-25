@@ -1,3 +1,5 @@
+//pluginref DayNightCycle.dll
+
 using System;
 using System.Collections.Generic;
 using MCGalaxy;
@@ -6,7 +8,7 @@ using MCGalaxy.Events;
 using MCGalaxy.Events.PlayerEvents;
 using MCGalaxy.Network;
 using MCGalaxy.Tasks;
-//pluginref daynightcycle.dll
+
 namespace ProjectCommunity {
 
     public class SleepSystem : Plugin {
@@ -21,8 +23,6 @@ namespace ProjectCommunity {
         public static DateTime voteCooldown = DateTime.Now;
 
         private static SchedulerTask sleepCheckTask;
-
-        private const int nightTime = 13000;
 
         public override void Load(bool startup) {
             Command.Register(pluginSleepCmd);
@@ -61,7 +61,9 @@ namespace ProjectCommunity {
                 return;
             }
 
-            if (DayNightCycle.timeOfDay < nightTime)
+            int timeOfDay = DayNightCycle.timeOfDay;
+
+            if (!(DayNightCycle.IsTimeInRange(timeOfDay, 19500, 24000) || DayNightCycle.IsTimeInRange(timeOfDay, 0, 5000)))
             {
                 SleepingPlayers.Clear();
                 return;
@@ -74,7 +76,8 @@ namespace ProjectCommunity {
         }
         public static void PlayerSleep(Player pl)
         {
-            if (DayNightCycle.timeOfDay < nightTime)
+            int timeOfDay = DayNightCycle.timeOfDay;
+            if (!(DayNightCycle.IsTimeInRange(timeOfDay, 19500, 24000) || DayNightCycle.IsTimeInRange(timeOfDay, 0, 5000)))
             {
                 pl.Message("%cIt is not night time yet!");
                 return;
@@ -109,7 +112,7 @@ namespace ProjectCommunity {
         {
             SleepingPlayers.Clear();
 
-            Command.Find("settime").Use(Player.Console, "23999");
+            Command.Find("settime").Use(Player.Console, "6:00");
             string message = "%eGood morning! %aThe night has been skipped!";
             foreach(var p in PlayerInfo.Online.Items)
                 p.Message(message);
