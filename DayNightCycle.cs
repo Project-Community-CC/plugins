@@ -275,7 +275,7 @@ namespace ProjectCommunity
             string timeStr = string.Format("{0}:{1:D2}{2}", hour, minute, period);
             string emoji = GetTimeEmoji();
 
-            return string.Format("{0} {1}, {2} (Season: {3})", emoji, currentDay, timeStr, currentSeason) + " " + ticks;
+            return string.Format("{0} {1}, {2} (Season: {3})", emoji, currentDay, timeStr, currentSeason);
         }
 
         private void DoDayNightCycle(SchedulerTask task)
