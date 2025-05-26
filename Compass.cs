@@ -1,11 +1,14 @@
-﻿// TODO: Sometimes the compass doesn't show ! for objectives?
+﻿//reference System.Core.dll
 //pluginref _Quests.dll
+// TODO: Sometimes the compass doesn't show ! for objectives?
+
 using MCGalaxy;
 using MCGalaxy.Events.PlayerEvents;
 using MCGalaxy.Maths;
 using MCGalaxy.Tasks;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ProjectCommunity
 {
@@ -13,7 +16,7 @@ namespace ProjectCommunity
     {
         public override string name { get { return "Compass"; } }
         public override string MCGalaxy_Version { get { return "1.9.3.3"; } }
-        public override string creator { get { return "123DontMessWitMe"; } } // Heavily modified by Venk
+        public override string creator { get { return "123DontMessWitMe, Venk"; } }
 
         SchedulerTask compassTask;
 
@@ -21,6 +24,13 @@ namespace ProjectCommunity
         "|       N       |       E       |       S       |       W       " +
         "|       N       |       E       |       S       |       W       " +
         "|       N       |       E       |       S       |       W       ";
+
+        private int cpeTickCounter = 0; // Non-standard clients experience lag when sending too many CPE packets. We'll use this value to send every 5 ticks instead of every tick.
+
+        private List<string> nonStandardClients = new List<string>()
+        {
+            "Web", "Mobile", "3DS", "Android"
+        };
 
         public override void Load(bool auto)
         {
@@ -39,6 +49,12 @@ namespace ProjectCommunity
             foreach (Player p in PlayerInfo.Online.Items)
             {
                 if (!p.Supports(CpeExt.MessageTypes)) return;
+
+                string app = p.Session.ClientName();
+                bool isNonStandardClient = nonStandardClients.Any(tag => app.Contains(tag));
+
+                if (isNonStandardClient && cpeTickCounter % 100 != 0)
+                    continue; // Skip this tick for non-standard clients
 
                 Vec3S32 playerPos = new Vec3S32(p.Pos.X, p.Pos.Y, p.Pos.Z);
                 Vec3S32? target = QuestProgressManager.GetActiveObjectiveTarget(p);
